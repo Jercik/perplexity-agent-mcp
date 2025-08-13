@@ -1,0 +1,37 @@
+{
+  "name": "perplexity-agent-mcp",
+  "version": "1.1.0",
+  "description": "Opinionated MCP server that makes Perplexity Sonar models work smoothly inside IDE agents (e.g., Claude Code) with two specialized tools, not a generic chat passthrough",
+  "keywords": [
+    "ai",
+    "perplexity",
+    "mcp",
+    "modelcontextprotocol"
+  ],
+  "license": "MIT",
+  "author": "Łukasz Jerciński",
+  "type": "module",
+  "main": "index.ts",
+  "bin": {
+    "perplexity-agent-mcp": "index.ts"
+  },
+  "scripts": {
+    "start": "node index.ts",
+    "test": "PERPLEXITY_API_KEY=test vitest run",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "prettier": "3.6.2",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
