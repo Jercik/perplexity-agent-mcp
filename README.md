@@ -1,6 +1,6 @@
 ## Perplexity Agent MCP
 
-An MCP server that gives your coding assistant access to Perplexity AI through two tools: `lookup` for quick fact-checking and `answer` for in-depth research with recommendations.
+An opinionated Model Context Protocol server that seamlessly integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code. It provides two specialized, purpose-built tools—`lookup` for instant fact-checking of API syntax and documentation details, and `answer` for comprehensive research with actionable recommendations—delivering clean, focused responses without internal reasoning.
 
 ### Setup
 
