@@ -11,12 +11,12 @@
   "license": "MIT",
   "author": "Łukasz Jerciński",
   "type": "module",
-  "main": "index.ts",
+  "main": "src/index.ts",
   "bin": {
-    "perplexity-agent-mcp": "index.ts"
+    "perplexity-agent-mcp": "src/index.ts"
   },
   "scripts": {
-    "start": "node index.ts",
+    "start": "node src/index.ts",
     "test": "PERPLEXITY_API_KEY=test vitest run",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."
