@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterThinkBlocks } from "./src/filter-think-blocks.ts";
+import { filterThinkBlocks } from "./filter-think-blocks.ts";
 
 describe("filterThinkBlocks", () => {
   describe("basic functionality", () => {
