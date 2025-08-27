@@ -6,6 +6,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { filterThinkBlocks } from "./filter-think-blocks.ts";
 
+// Zod schema for parsing Perplexity search_results
+const SearchResult = z.object({
+  title: z.string(),
+  url: z.string(),
+  date: z.string().optional(),
+  last_updated: z.string().optional(),
+});
+const SearchResults = z.array(SearchResult);
+
 const AUTHORITATIVE_SOURCES = `
 AUTHORITATIVE SOURCES TO CHECK (use when relevant)
 
@@ -134,6 +143,33 @@ async function performChatCompletion(
   // Filter out <think> blocks from reasoning models (e.g., sonar-reasoning-pro)
   // These blocks contain internal reasoning tokens that should not be exposed to MCP clients
   messageContent = filterThinkBlocks(messageContent);
+
+  // Build final content and normalize whitespace consistently
+
+  // Append Sources section by rendering all search_results in order.
+  try {
+    const parsed = SearchResults.safeParse(data.search_results);
+    if (
+      parsed.success &&
+      parsed.data.length > 0 &&
+      typeof messageContent === "string"
+    ) {
+      const lines = parsed.data.map((sr, i) => {
+        const idx = i + 1;
+        const dateSuffix = sr.date ? ` (${sr.date})` : "";
+        return `[${idx}] ${sr.title} — ${sr.url}${dateSuffix}`;
+      });
+      messageContent = `${messageContent}\n\nSources:\n${lines.join("\n")}`;
+    }
+  } catch (_) {
+    // If anything goes wrong while appending sources, fall back to content only.
+  }
+
+  // Trim leading and trailing whitespace, then ensure one trailing newline
+  messageContent = String(messageContent).trim();
+
+  // Ensure trailing newline in final response
+  messageContent += "\n";
 
   return messageContent;
 }
