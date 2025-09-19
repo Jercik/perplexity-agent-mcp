@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    /* Not running in the DOM */
+    "lib": ["es2022"],
+    "types": ["node", "vitest/globals"],
+
+    /* Not transpiling with TypeScript */
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "**/*.test.tsx",
+    "**/*.spec.tsx"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

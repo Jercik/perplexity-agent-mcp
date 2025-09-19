@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import packageJson from "../package.json" with { type: "json" };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { filterThinkBlocks } from "./filter-think-blocks.ts";
+import { filterThinkBlocks } from "./filter-think-blocks.js";
 
 // Zod schema for parsing Perplexity search_results
 const SearchResult = z.object({
@@ -94,7 +94,7 @@ type ChatOpts = {
  */
 async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
-  opts: ChatOpts
+  opts: ChatOpts,
 ): Promise<string> {
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
@@ -125,7 +125,7 @@ async function performChatCompletion(
       errorText = "Unable to parse error response";
     }
     throw new Error(
-      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`
+      `Perplexity API error: ${response.status} ${response.statusText}\n${errorText}`,
     );
   }
 
@@ -134,7 +134,7 @@ async function performChatCompletion(
     data = await response.json();
   } catch (jsonError) {
     throw new Error(
-      `Failed to parse JSON response from Perplexity API: ${jsonError}`
+      `Failed to parse JSON response from Perplexity API: ${jsonError}`,
     );
   }
 
@@ -199,10 +199,10 @@ Returns short, factual answers. No recommendations or comparisons.
         model: "sonar-pro",
         system: LOOKUP_SYSTEM_PROMPT,
         searchContextSize: "medium",
-      }
+      },
     );
     return { content: [{ type: "text", text: result }] };
-  }
+  },
 );
 
 // answer tool
@@ -225,17 +225,17 @@ Returns a concise recommendation, a brief why, and short how-to steps.
         model: "sonar-reasoning-pro",
         system: ANSWER_SYSTEM_PROMPT,
         searchContextSize: "high",
-      }
+      },
     );
     return { content: [{ type: "text", text: result }] };
-  }
+  },
 );
 
 async function runServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    "Perplexity MCP Server running on stdio with Lookup and Answer tools"
+    "Perplexity MCP Server running on stdio with Lookup and Answer tools",
   );
 }
 
