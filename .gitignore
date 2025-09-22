@@ -37,6 +37,10 @@ npm-debug.log
 yarn-error.log
 *.tsbuildinfo
 
+# pnpm specific
+.pnpm-store
+.pnpm-debug.log
+
 # Ignore coverage and test reports
 .coverage
 coverage.xml
