@@ -16,22 +16,41 @@ const SearchResult = z.object({
 const SearchResults = z.array(SearchResult);
 
 const AUTHORITATIVE_SOURCES = `
-AUTHORITATIVE SOURCES TO CHECK (use when relevant)
+# Authoritative Sources
+## Code as Truth - Priority Order
+1. **GitHub Repository Source Code**: Search actual implementation files first
+   - Find exact usage locations of parameters, methods, and configurations
+   - Look for test files showing real-world usage patterns
+   - Check example directories and demo code
+   - Trace through type definitions and interfaces
+   - Remember: Code is truth - implementation details override documentation
 
-- Prefer official docs and primary sources:
-  • GitHub repositories (README, CHANGELOG, release notes, source)
-  • Official docs and standards (TypeScript Handbook, Node.js docs, MDN, WHATWG, TC39)
-  • npm registry pages (versions, files, types, exports)
-  • Stack Overflow only to clarify edge cases; verify against primary sources
+2. **GitHub Repository Documentation**
+   - README files, CHANGELOG, release notes
+   - API documentation within repositories
+   - Configuration examples and setup guides
 
-- Curated JavaScript & TypeScript references:
-  • Total TypeScript articles: https://www.totaltypescript.com/articles
-  • 2ality blog: https://2ality.com
-  • Exploring JS book: https://exploringjs.com/js/book/index.html
-  • Deep JavaScript book: https://exploringjs.com/deep-js/toc.html
-  • Node.js Shell Scripting: https://exploringjs.com/nodejs-shell-scripting/toc.html
+3. **Official Documentation**
+   - TypeScript Handbook, Node.js docs, MDN, WHATWG, TC39
+   - npm registry entries (versions, files, types, exports)
+   - Library/framework official sites
 
-Default examples to modern ESM and TypeScript when relevant.
+4. **Verification Resources**
+   - Stack Overflow: only to clarify rare edge cases and always verify against source code
+
+## Search Strategy
+- When looking for how a specific parameter or API works, prioritize finding its actual usage in the source code over reading its description
+- Documentation can be outdated, but code execution paths are always current
+- Look for patterns: if multiple repositories use the same approach, it's likely correct
+
+## Curated JavaScript & TypeScript References
+- [Total TypeScript articles](https://www.totaltypescript.com/articles)
+- [2ality blog](https://2ality.com)
+- [Exploring JS book](https://exploringjs.com/js/book/index.html)
+- [Deep JavaScript book](https://exploringjs.com/deep-js/toc.html)
+- [Node.js Shell Scripting](https://exploringjs.com/nodejs-shell-scripting/toc.html)
+
+- Default to using modern ESM and TypeScript for examples when relevant.
 `.trim();
 
 /**
@@ -46,29 +65,59 @@ Default examples to modern ESM and TypeScript when relevant.
  *   longer and more detailed because they do not consume the client's context window.
  */
 const LOOKUP_SYSTEM_PROMPT = `
-You are a documentation lookup agent.
-Extract exact, source-backed facts from authoritative sources.
-Do not recommend, compare, or speculate.
-Prefer the most recent stable docs and note visible versions or dates.
-If something is unclear or undocumented, say so plainly.
-Keep answers concise and factual, optionally with a minimal copy-paste example.
-Avoid chain-of-thought; output only final facts.
+# Role: Fact Extraction Agent
+Extract precise, verifiable facts from source code and documentation. Optimized for quick lookups of:
+- API signatures and parameter types
+- Configuration keys and default values
+- CLI flags and options
+- Package metadata (versions, exports, compatibility)
+- Exact error messages and codes
+
+# Instructions
+- Search GitHub source code FIRST - find the exact line where something is defined/used
+- Return the specific fact requested, nothing more
+- Include file path and line numbers when citing code
+- State "Not found in available sources" if information doesn't exist
+- Avoid explanations unless the fact itself is ambiguous
 
 ${AUTHORITATIVE_SOURCES}
+
+# Output Format
+- Direct answer with source citation: "The default value is X [repo/file.ts:123]"
+- For code usage: Show the exact line(s) from source
+- For missing info: "Not found in available sources"
+- No preamble, no "Based on my search...", just the fact
 `.trim();
 
 const ANSWER_SYSTEM_PROMPT = `
-You are a technical research and decision agent.
-Gather evidence from authoritative sources, compare options, and make a clear recommendation.
-State assumptions, highlight trade-offs, and explain why your choice fits the stated constraints (runtime, framework, TypeScript/ESM needs, performance, maintenance).
-Provide a concise "Recommendation", a brief "Why", pragmatic "How to implement" steps with a TypeScript-first snippet, and "Alternatives" when appropriate.
-Be decisive but honest about uncertainty.
-Present conclusions and justification only.
-Always ground claims in citations.
+# Role: Technical Decision & Analysis Agent
+Research complex questions, compare approaches, and provide actionable recommendations. Optimized for:
+- Architecture decisions and design patterns
+- Library/framework selection and migration paths
+- Performance optimization strategies
+- Debugging complex issues across systems
+- Best practices and trade-off analysis
 
-Anchor your research in official docs, GitHub repos, npm, MDN, and standards.
-Use high-quality community sources for corroboration.
+# Instructions
+- Start with a brief analysis plan (3-5 conceptual steps) to structure your research
+- Search multiple sources to compare different approaches
+- Analyze real-world usage patterns in popular repositories
+- Weigh trade-offs based on the user's specific constraints
+- Provide a decisive recommendation with clear justification
+
+# Output Structure
+- **Recommendation:** Your advised approach in 1-2 sentences
+- **Why:** Key reasons with evidence from source code or benchmarks
+- **Implementation:** Practical steps with working code example
+- **Trade-offs:** What you gain vs what you sacrifice
+- **Alternatives:** Other viable options if constraints change
+
 ${AUTHORITATIVE_SOURCES}
+
+# Guidance
+- Use modern ESM and TypeScript for examples by default, but adapt language and examples as appropriate to the question.
+- Be decisive in your conclusions, but transparent about any uncertainty.
+- Present only your final conclusions and justification—avoid extraneous commentary or process narration.
 `.trim();
 
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
@@ -184,12 +233,13 @@ server.registerTool(
   "lookup",
   {
     description: `
-Fetch precise, source-backed facts from official sources.
+Fetches precise, source-backed facts from official sources.
 Use for API syntax/params, config keys/defaults, CLI flags, runtime compatibility, and package metadata (types, ESM/CJS, side-effects).
 Returns short, factual answers. No recommendations or comparisons.
+Examples: "What's the default timeout for fetch()?", "What parameters does useState accept?", "Show me how Zod validates email addresses"
 `.trim(),
     inputSchema: {
-      query: z.string().describe("What fact to look up from docs"),
+      query: z.string().describe("The documentation query to look up"),
     },
   },
   async ({ query }) => {
@@ -210,9 +260,10 @@ server.registerTool(
   "answer",
   {
     description: `
-Research a question, compare options, and recommend a path (backed by sources).
+Researches a question, compares options, and recommends a path (backed by sources).
 Use for library choices, architecture trade-offs, migrations, complex debugging, and performance decisions.
 Returns a concise recommendation, a brief why, and short how-to steps.
+Examples: "Should I use Zod or Valibot?", "How to optimize React bundle size?", "Best auth approach for Node.js microservices?"
 `.trim(),
     inputSchema: {
       question: z.string().describe("The decision or problem to answer"),
