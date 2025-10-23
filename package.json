@@ -10,6 +10,7 @@
   ],
   "license": "MIT",
   "author": "Łukasz Jerciński",
+  "packageManager": "pnpm@10.19.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.1.0",
     "@commitlint/config-conventional": "^20.0.0",
+    "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^24.9.1",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
