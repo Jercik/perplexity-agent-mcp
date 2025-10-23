@@ -20,8 +20,6 @@
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=test vitest run",
     "typecheck": "tsc -b --noEmit",
-    "typecheck:app": "tsc --noEmit -p tsconfig.app.json",
-    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

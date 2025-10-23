@@ -26,7 +26,6 @@ venv/
 
 # Ignore IDE specific files
 .idea/
-.vscode/
 *.swp
 *.swo
 
