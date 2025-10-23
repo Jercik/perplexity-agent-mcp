@@ -22,7 +22,8 @@
     "typecheck": "tsc -b --noEmit",
     "typecheck:app": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.1",

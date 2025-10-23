@@ -44,7 +44,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Format check
-        run: pnpm prettier --check .
+        run: pnpm format:check
 
       - name: Run tests
         run: pnpm test
