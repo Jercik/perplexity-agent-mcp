@@ -6,8 +6,6 @@ on:
       - main
       - "claude/**"
   pull_request:
-    branches:
-      - main
 
 jobs:
   quality-checks:
