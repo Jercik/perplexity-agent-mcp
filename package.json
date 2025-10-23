@@ -21,15 +21,20 @@
     "test": "PERPLEXITY_API_KEY=test vitest run",
     "typecheck": "tsc -b --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "commitlint:check": "commitlint --from HEAD~20 --to HEAD --verbose"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
     "@types/node": "^24.9.1",
     "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
     "prettier": "3.6.2",
     "typescript": "^5.9.3",
     "vitest": "^4.0.1"
