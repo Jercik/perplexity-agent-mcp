@@ -28,12 +28,12 @@ Restart Claude Code after saving, and you're ready to go.
 
 ### How it works
 
-The server provides two tools:
+The server exposes only two tools with concise descriptions (~1.3K tokens), keeping your context window lean and efficient:
 
 - **lookup**: Gets quick facts from documentation (like API syntax or config keys)
 - **answer**: Does deeper research to compare options and make recommendations
 
-Both tools return clean, focused answers without any internal reasoning clutter. The server picks the right AI model for each job—fast for lookups, thorough for research.
+Both tools return clean, focused answers without any internal reasoning clutter. The server picks the right AI model for each job—fast for lookups, thorough for research. The minimal token footprint ensures your AI assistant has maximum context available for your actual code and conversations.
 
 ### Requirements
 
