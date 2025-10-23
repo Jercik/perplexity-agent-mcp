@@ -33,7 +33,7 @@ jobs:
       - name: Run typecheck
         run: pnpm run typecheck
 
-      - name: Run lint (format check)
+      - name: Check code formatting
         run: pnpm run format:check
 
       - name: Run tests
