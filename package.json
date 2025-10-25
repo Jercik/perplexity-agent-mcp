@@ -49,5 +49,10 @@
     "dist",
     "LICENSE",
     "README.md"
-  ]
+  ],
+  "release": {
+    "branches": [
+      "main"
+    ]
+  }
 }
