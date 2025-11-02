@@ -24,6 +24,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
+    "prepublishOnly": "pnpm build",
     "commitlint:check": "commitlint --from HEAD~20 --to HEAD --verbose"
   },
   "dependencies": {
@@ -38,11 +39,12 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "prettier": "3.6.2",
+    "semantic-release": "^25.0.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.3"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14.0"
   },
   "types": "dist/index.d.ts",
   "files": [
@@ -54,5 +56,13 @@
     "branches": [
       "main"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jercik/perplexity-agent-mcp"
+  },
+  "homepage": "https://github.com/Jercik/perplexity-agent-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/Jercik/perplexity-agent-mcp/issues"
   }
 }
