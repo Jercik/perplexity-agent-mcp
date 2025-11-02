@@ -5,31 +5,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { filterThinkBlocks } from "./filter-think-blocks.js";
-
-// Zod schema for parsing Perplexity search_results
-const SearchResult = z.object({
-  title: z.string(),
-  url: z.string(),
-  date: z.string().optional(),
-  last_updated: z.string().optional(),
-});
-const SearchResults = z.array(SearchResult);
-
-// Minimal Perplexity response shape we rely on
-const PerplexityResponse = z.object({
-  choices: z
-    .array(
-      z.object({
-        message: z
-          .object({
-            content: z.string().optional(),
-          })
-          .optional(),
-      }),
-    )
-    .optional(),
-  search_results: SearchResults.optional(),
-});
+import { PerplexityResponse } from "./schemas/perplexity-response.js";
 
 const AUTHORITATIVE_SOURCES = `
 # Authoritative Sources
