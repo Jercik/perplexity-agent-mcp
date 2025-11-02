@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import packageJson from "../package.json" with { type: "json" };
-import { registerLookupTool, registerAnswerTool } from "./tools/index.js";
+import { registerLookupTool } from "./tools/lookup.js";
+import { registerAnswerTool } from "./tools/answer.js";
 
 /**
  * Creates and configures the MCP server with all tools
