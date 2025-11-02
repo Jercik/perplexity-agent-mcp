@@ -10,7 +10,7 @@
   ],
   "license": "MIT",
   "author": "Łukasz Jerciński",
-  "packageManager": "pnpm@10.19.0",
+  "packageManager": "pnpm@10.20.0",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

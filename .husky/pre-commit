@@ -1,10 +1,8 @@
-#!/usr/bin/env sh
-set -e
-
 # Format only staged files with Prettier
 prettier $(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g') --write --ignore-unknown --log-level warn
 git update-index --again
 
 # Code quality checks
 pnpm -s run typecheck
+pnpm -s run lint
 pnpm -s run test
