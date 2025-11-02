@@ -15,6 +15,22 @@ const SearchResult = z.object({
 });
 const SearchResults = z.array(SearchResult);
 
+// Minimal Perplexity response shape we rely on
+const PerplexityResponse = z.object({
+  choices: z
+    .array(
+      z.object({
+        message: z
+          .object({
+            content: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+  search_results: SearchResults.optional(),
+});
+
 const AUTHORITATIVE_SOURCES = `
 # Authoritative Sources
 ## Code as Truth - Priority Order
@@ -126,7 +142,7 @@ if (!PERPLEXITY_API_KEY) {
   process.exit(1);
 }
 
-type ChatOpts = {
+type ChatOptions = {
   model: string;
   system: string;
   searchContextSize: "low" | "medium" | "high";
@@ -143,13 +159,13 @@ type ChatOpts = {
  */
 async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
-  opts: ChatOpts,
+  options: ChatOptions,
 ): Promise<string> {
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
-    model: opts.model,
-    messages: [{ role: "system", content: opts.system }, ...messages],
-    web_search_options: { search_context_size: opts.searchContextSize },
+    model: options.model,
+    messages: [{ role: "system", content: options.system }, ...messages],
+    web_search_options: { search_context_size: options.searchContextSize },
   };
 
   let response;
@@ -163,14 +179,15 @@ async function performChatCompletion(
       body: JSON.stringify(body),
     });
   } catch (error) {
-    throw new Error(`Network error while calling Perplexity API: ${error}`);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Network error while calling Perplexity API: ${message}`);
   }
 
   if (!response.ok) {
     let errorText;
     try {
       errorText = await response.text();
-    } catch (parseError) {
+    } catch {
       errorText = "Unable to parse error response";
     }
     throw new Error(
@@ -178,16 +195,22 @@ async function performChatCompletion(
     );
   }
 
-  let data: any;
+  let json: unknown;
   try {
-    data = await response.json();
+    json = await response.json();
   } catch (jsonError) {
+    const message =
+      jsonError instanceof Error ? jsonError.message : String(jsonError);
     throw new Error(
-      `Failed to parse JSON response from Perplexity API: ${jsonError}`,
+      `Failed to parse JSON response from Perplexity API: ${message}`,
     );
   }
 
-  let messageContent = data.choices?.[0]?.message?.content ?? "";
+  const parsedResponse = PerplexityResponse.safeParse(json);
+
+  let messageContent: string = parsedResponse.success
+    ? (parsedResponse.data.choices?.[0]?.message?.content ?? "")
+    : "";
 
   // Filter out <think> blocks from reasoning models (e.g., sonar-reasoning-pro)
   // These blocks contain internal reasoning tokens that should not be exposed to MCP clients
@@ -196,26 +219,20 @@ async function performChatCompletion(
   // Build final content and normalize whitespace consistently
 
   // Append Sources section by rendering all search_results in order.
-  try {
-    const parsed = SearchResults.safeParse(data.search_results);
-    if (
-      parsed.success &&
-      parsed.data.length > 0 &&
-      typeof messageContent === "string"
-    ) {
-      const lines = parsed.data.map((sr, i) => {
-        const idx = i + 1;
+  if (parsedResponse.success && parsedResponse.data.search_results) {
+    const results = parsedResponse.data.search_results;
+    if (results.length > 0) {
+      const lines = results.map((sr, index) => {
+        const index_ = index + 1;
         const dateSuffix = sr.date ? ` (${sr.date})` : "";
-        return `[${idx}] ${sr.title} — ${sr.url}${dateSuffix}`;
+        return `[${index_}] ${sr.title} — ${sr.url}${dateSuffix}`;
       });
       messageContent = `${messageContent}\n\nSources:\n${lines.join("\n")}`;
     }
-  } catch (_) {
-    // If anything goes wrong while appending sources, fall back to content only.
   }
 
   // Trim leading and trailing whitespace, then ensure one trailing newline
-  messageContent = String(messageContent).trim();
+  messageContent = messageContent.trim();
 
   // Ensure trailing newline in final response
   messageContent += "\n";
@@ -290,7 +307,9 @@ async function runServer() {
   );
 }
 
-runServer().catch((error) => {
+try {
+  await runServer();
+} catch (error) {
   console.error("Fatal error running server:", error);
   process.exit(1);
-});
+}

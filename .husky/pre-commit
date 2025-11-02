@@ -1,1 +1,9 @@
-pnpm test
+# Format only staged files with Prettier
+prettier $(git diff --cached --name-only --diff-filter=ACMR | sed 's| |\\ |g') --write --ignore-unknown --log-level warn
+git update-index --again
+
+# Code quality checks (ordered)
+# 1) TypeScript typecheck
+pnpm -s run typecheck
+# 2) Tests
+pnpm -s run test
