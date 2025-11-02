@@ -1,7 +1,7 @@
 {
   "name": "perplexity-agent-mcp",
   "version": "1.3.0",
-  "description": "An opinionated, coding‑specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI.",
+  "description": "An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI.",
   "keywords": [
     "ai",
     "perplexity",
