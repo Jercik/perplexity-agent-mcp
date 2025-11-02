@@ -15,11 +15,7 @@ export default defineConfig(
 
   {
     name: "Additional ignore patterns",
-    ignores: [
-      "coverage/**",
-      "references/catalyst-ui-kit/**",
-      "*.config.{js,mjs,mts}",
-    ],
+    ignores: ["*.config.{js,mjs,mts}"],
   },
 
   {
