@@ -1,8 +1,6 @@
 import { type ChatOptions, PerplexityResponse } from "./schemas.js";
 import { filterThinkBlocks } from "./filter-think-blocks.js";
 
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-
 /**
  * Performs a chat completion by sending a request to the Perplexity API.
  * Filters out <think> blocks from reasoning models before returning content.
@@ -16,6 +14,12 @@ export async function performChatCompletion(
   messages: Array<{ role: string; content: string }>,
   options: ChatOptions,
 ): Promise<string> {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "PERPLEXITY_API_KEY is not set. Please export it before calling performChatCompletion().",
+    );
+  }
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
     model: options.model,
@@ -29,7 +33,7 @@ export async function performChatCompletion(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
     });
