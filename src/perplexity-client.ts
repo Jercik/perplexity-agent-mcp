@@ -1,5 +1,5 @@
 import { type ChatOptions, PerplexityResponse } from "./schemas.js";
-import { stripThinkContent } from "./filter-think-blocks.js";
+import { stripThinkContent } from "./strip-think-content.js";
 
 /**
  * Performs a chat completion by sending a request to the Perplexity API.

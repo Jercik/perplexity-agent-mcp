@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripThinkContent } from "./filter-think-blocks.ts";
+import { stripThinkContent } from "./strip-think-content.ts";
 
 describe("stripThinkContent", () => {
   describe("basic functionality", () => {
