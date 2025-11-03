@@ -13,7 +13,7 @@
  * @param {string} input - The raw content from the API response
  * @returns {string} The content with <think> blocks removed
  */
-export function filterThinkBlocks(input: string): string {
+export function stripThinkContent(input: string): string {
   const open = "<think>";
   const close = "</think>";
 

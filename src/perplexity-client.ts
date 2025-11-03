@@ -1,5 +1,5 @@
 import { type ChatOptions, PerplexityResponse } from "./schemas.js";
-import { filterThinkBlocks } from "./filter-think-blocks.js";
+import { stripThinkContent } from "./strip-think-content.js";
 
 /**
  * Performs a chat completion by sending a request to the Perplexity API.
@@ -73,7 +73,7 @@ export async function performChatCompletion(
 
   // Filter out <think> blocks from reasoning models (e.g., sonar-reasoning-pro)
   // These blocks contain internal reasoning tokens that should not be exposed to MCP clients
-  messageContent = filterThinkBlocks(messageContent);
+  messageContent = stripThinkContent(messageContent);
 
   // Build final content and normalize whitespace consistently
 

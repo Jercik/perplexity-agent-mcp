@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { filterThinkBlocks } from "./filter-think-blocks.ts";
+import { stripThinkContent } from "./strip-think-content.ts";
 
-describe("filterThinkBlocks", () => {
+describe("stripThinkContent", () => {
   describe("basic functionality", () => {
     it("should remove simple think blocks", () => {
       const input = "Before <think>reasoning content</think> After";
       const expected = "Before  After";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
@@ -19,7 +19,7 @@ describe("filterThinkBlocks", () => {
 </think>
 After`;
       const expected = "Before\n\nAfter";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
@@ -27,7 +27,7 @@ After`;
       const input =
         "Start <think>first</think> middle <think>second</think> end";
       const expected = "Start  end";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
   });
@@ -45,7 +45,7 @@ After`;
 After content`;
 
       const expected = "Before content\n\nAfter content";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
@@ -65,7 +65,7 @@ After content`;
 End`;
 
       const expected = "Start\n\nEnd";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
@@ -83,7 +83,7 @@ End`;
 Last <think>another simple</think> end`;
 
       const expected = "First  end";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
@@ -101,7 +101,7 @@ Last <think>another simple</think> end`;
 </think>`;
 
       const expected = "";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
   });
@@ -110,7 +110,7 @@ Last <think>another simple</think> end`;
     it("should handle unbalanced nested tags - extra opening tag", () => {
       const input = "<think>foo<think></think>";
       const expected = "";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
 
       expect(result).toBe(expected);
     });
@@ -118,7 +118,7 @@ Last <think>another simple</think> end`;
     it("should handle unbalanced nested tags - extra closing tag", () => {
       const input = "Start <think></think>foo</think> End";
       const expected = "Start  End";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
 
       expect(result).toBe(expected);
     });
@@ -126,14 +126,14 @@ Last <think>another simple</think> end`;
     it("should handle text around unbalanced tags", () => {
       const input = "Before <think>foo<think></think> After";
       const expected = "Before  After";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
       expect(result).toBe(expected);
     });
 
     it("should handle completely unmatched opening tag", () => {
       const input = "Before <think>unclosed content After";
       const expected = "Before <think>unclosed content After";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
 
       expect(result).toBe(expected);
     });
@@ -141,7 +141,7 @@ Last <think>another simple</think> end`;
     it("should handle completely unmatched closing tag", () => {
       const input = "Before unopened content</think> After";
       const expected = "Before unopened content</think> After";
-      const result = filterThinkBlocks(input);
+      const result = stripThinkContent(input);
 
       expect(result).toBe(expected);
     });
