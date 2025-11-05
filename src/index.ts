@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 
+import packageJson from "../package.json" with { type: "json" };
 import { runServer } from "./server.js";
 
 /**
  * Main entry point for the Perplexity MCP Server
  */
+
+const arguments_ = new Set(process.argv.slice(2));
+
+if (arguments_.has("--version") || arguments_.has("-v")) {
+  console.log(packageJson.version);
+  process.exit(0);
+}
 
 // Validate required environment variables
 // Preflight check to fail fast before starting the server for a clearer UX.
