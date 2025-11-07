@@ -1,6 +1,10 @@
-## Perplexity Agent MCP
+# Perplexity Agent MCP
 
 An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI. It's deliberately lean and adds very few tokens to your context. It provides two specialized tools—`lookup` for instant fact-checking of API syntax and documentation details, and `answer` for comprehensive research with actionable recommendations.
+
+<a href="https://glama.ai/mcp/servers/@Jercik/perplexity-agent-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@Jercik/perplexity-agent-mcp/badge" alt="Perplexity Agent MCP server" />
+</a>
 
 ### Setup
 
