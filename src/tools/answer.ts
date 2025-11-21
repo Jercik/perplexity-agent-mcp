@@ -16,6 +16,7 @@ Researches a question, compares options, and recommends a path (backed by source
 Use for library choices, architecture trade-offs, migrations, complex debugging, and performance decisions.
 Returns a concise recommendation, a brief why, and short how-to steps.
 Examples: "Should I use Zod or Valibot?", "How to optimize React bundle size?", "Best auth approach for Node.js microservices?"
+One question per call—split combined requests into separate queries.
 `.trim(),
       inputSchema: {
         question: z.string().describe("The decision or problem to answer"),

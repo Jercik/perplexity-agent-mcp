@@ -16,6 +16,7 @@ Fetches precise, source-backed facts from official sources.
 Use for API syntax/params, config keys/defaults, CLI flags, runtime compatibility, and package metadata (types, ESM/CJS, side-effects).
 Returns short, factual answers. No recommendations or comparisons.
 Examples: "What's the default timeout for fetch()?", "What parameters does useState accept?", "Show me how Zod validates email addresses"
+One question per call—split combined requests into separate queries.
 `.trim(),
       inputSchema: {
         query: z.string().describe("The documentation query to look up"),
