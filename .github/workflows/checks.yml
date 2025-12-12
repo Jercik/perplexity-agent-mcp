@@ -1,22 +1,17 @@
 name: Checks
-permissions:
-  contents: read
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize]
 
 jobs:
   quality-checks:
-    name: Code Quality Checks
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -30,17 +25,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run knip
+        run: pnpm knip
+
       - name: Run format check
-        run: pnpm run format:check
+        run: pnpm format:check
 
       - name: Run typecheck
-        run: pnpm run typecheck
+        run: pnpm typecheck
 
       - name: Run lint
-        run: pnpm run lint
+        run: pnpm lint
+
+      - name: Run fta:check
+        run: pnpm fta:check
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm test
 
       - name: Run build
-        run: pnpm run build
+        run: pnpm build

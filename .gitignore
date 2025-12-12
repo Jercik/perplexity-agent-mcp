@@ -56,13 +56,3 @@ Desktop.ini
 *.csv
 *.tsv
 *.jsonl
-
-
-# AI Coding Agents
-CLAUDE.md
-GEMINI.md
-AGENTS.md
-.kilocode/rules/**
-
-repomix-output.*
-repomix.config.json
