@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Schema for parsing a single Perplexity search result
  */
-export const SearchResult = z.object({
+const SearchResult = z.object({
   title: z.string(),
   url: z.string(),
   date: z.string().optional(),
@@ -13,7 +13,7 @@ export const SearchResult = z.object({
 /**
  * Schema for parsing an array of Perplexity search results
  */
-export const SearchResults = z.array(SearchResult);
+const SearchResults = z.array(SearchResult);
 
 /**
  * Minimal Perplexity response shape we rely on

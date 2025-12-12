@@ -1,7 +1,7 @@
 /**
  * Authoritative sources guidance shared across all prompts
  */
-export const AUTHORITATIVE_SOURCES = `
+const AUTHORITATIVE_SOURCES = `
 # Authoritative Sources
 ## Code as Truth - Priority Order
 1. **GitHub Repository Source Code**: Search actual implementation files first

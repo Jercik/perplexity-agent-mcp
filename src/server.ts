@@ -7,7 +7,7 @@ import { registerAnswerTool } from "./tools/answer.js";
 /**
  * Creates and configures the MCP server with all tools
  */
-export function createServer(): McpServer {
+function createServer(): McpServer {
   const server = new McpServer({
     name: packageJson.name,
     version: packageJson.version,
