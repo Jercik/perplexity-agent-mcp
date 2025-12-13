@@ -1,0 +1,3 @@
+{
+  "exclude_filenames": ["*.test.{ts,tsx}"]
+}
