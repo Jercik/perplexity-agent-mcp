@@ -37,8 +37,8 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
-      - name: Run fta:check
-        run: pnpm fta:check
+      - name: Run fta
+        run: pnpm fta
 
       - name: Run tests
         run: pnpm test
