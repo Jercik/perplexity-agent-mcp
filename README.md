@@ -44,3 +44,5 @@ Please update the "foo" dependency to the latest version. Use Perplexity for the
 
 - Node.js v22.14.0 or newer
 - A Perplexity API key
+
+# Testing hooks

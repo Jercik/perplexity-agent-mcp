@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Native Git hook - enable with: git config core.hooksPath .githooks
+set -euo pipefail
+
+git diff --cached --check
+
+if [[ ! -f package.json ]]; then
+  exit 0
+fi
+
+if command -v npm >/dev/null 2>&1; then
+  npm pkg fix || true
+  git add package.json 2>/dev/null || true
+fi
+
+# Format staged files with prettier (filter out symlinks - prettier refuses to format them)
+if command -v pnpm >/dev/null 2>&1; then
+  PRETTIER_CMD="pnpm exec prettier"
+elif command -v npm >/dev/null 2>&1; then
+  PRETTIER_CMD="npx prettier"
+else
+  echo "No package manager available to run prettier" >&2
+  exit 1
+fi
+
+git diff --cached --name-only --diff-filter=ACMR -z \
+  | xargs -0 -I{} sh -c 'test -L "$1" || printf "%s\0" "$1"' _ {} \
+  | xargs -0 $PRETTIER_CMD --write --ignore-unknown --log-level warn --
+git update-index --again
+
+run_script() {
+  local script_name="$1"
+  # Check if the script exists in package.json (node - reads from stdin, arg becomes argv[2])
+  if node - "$script_name" <<'EOF'
+const fs = require("fs");
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const scripts = pkg.scripts || {};
+process.exit(scripts[process.argv[2]] ? 0 : 1);
+EOF
+  then
+    if command -v pnpm >/dev/null 2>&1; then
+      pnpm -s run "$script_name"
+    elif command -v npm >/dev/null 2>&1; then
+      npm run --silent "$script_name"
+    else
+      echo "No package manager available to run script: $script_name" >&2
+      exit 1
+    fi
+  fi
+}
+
+run_script "knip"
+run_script "typecheck"
+run_script "lint"
+run_script "fta"
+run_script "test"
