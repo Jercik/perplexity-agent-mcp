@@ -15,17 +15,17 @@ fi
 
 # Format staged files with prettier (filter out symlinks - prettier refuses to format them)
 if command -v pnpm >/dev/null 2>&1; then
-  PRETTIER_CMD="pnpm exec prettier"
+  PRETTIER_CMD=(pnpm exec prettier)
 elif command -v npm >/dev/null 2>&1; then
-  PRETTIER_CMD="npx prettier"
+  PRETTIER_CMD=(npx prettier)
 else
   echo "No package manager available to run prettier" >&2
   exit 1
 fi
 
 git diff --cached --name-only --diff-filter=ACMR -z \
-  | xargs -0 -I{} sh -c 'test -L "$1" || printf "%s\0" "$1"' _ {} \
-  | xargs -0 $PRETTIER_CMD --write --ignore-unknown --log-level warn --
+  | xargs -0 bash -c 'for f; do [[ -L "$f" ]] || printf "%s\0" "$f"; done' _ \
+  | xargs -0 -r "${PRETTIER_CMD[@]}" --write --ignore-unknown --log-level warn --
 git update-index --again
 
 run_script() {
@@ -53,4 +53,14 @@ run_script "knip"
 run_script "typecheck"
 run_script "lint"
 run_script "fta"
-run_script "test"
+
+# Run tests quietly - only show output on failure
+test_log=$(mktemp)
+trap 'rm -f "$test_log"' EXIT
+
+if run_script "test" > "$test_log" 2>&1; then
+  : # Success, stay silent
+else
+  cat "$test_log" >&2
+  exit 1
+fi
