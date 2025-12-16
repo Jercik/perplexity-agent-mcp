@@ -43,7 +43,7 @@ fi
 # Run commitlint via npx with @commitlint/config-conventional.
 # Extract the npx cache node_modules path from PATH and create a temp config
 # with an absolute path to the config-conventional module.
-npx -y -p @commitlint/cli@20.2.0 -p @commitlint/config-conventional@20.2.0 sh -c '
+npx -y -p @commitlint/cli@20.2.0 -p @commitlint/config-conventional@20.2.0 bash -c '
   set -e
   # Extract npx node_modules from PATH (first entry ending in .bin)
   npx_bin=$(echo "$PATH" | tr ":" "\n" | grep "/_npx/.*/.bin$" | head -1)
