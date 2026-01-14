@@ -151,7 +151,7 @@ Example of mixed logic and side effects:
 // Bad: Logic and side effects are mixed
 function sendUserExpiryEmail(): void {
   for (const user of db.getUsers()) {
-    if (user.subscriptionEndDate > Date.now()) continue;
+    if (user.subscriptionEndDate > new Date()) continue;
     if (user.isFreeTrial) continue;
     email.send(user.email, "Your account has expired " + user.name + ".");
   }
@@ -177,7 +177,7 @@ function generateExpiryEmails(users: User[]): Array<[string, string]> {
 
 // Imperative shell - handles side effects
 email.bulkSend(
-  generateExpiryEmails(getExpiredUsers(db.getUsers(), Date.now())),
+  generateExpiryEmails(getExpiredUsers(db.getUsers(), new Date())),
 );
 ```
 
