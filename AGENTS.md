@@ -20,7 +20,7 @@ Use concise prompts for quick facts and focused questions for deeper topics. If 
 
 # Rule: Avoid Leaky Abstractions
 
-Design abstractions around consumer needs, not implementation details. A leaky abstraction forces callers to understand the underlying system to use it correctly—defeating its purpose. While all non-trivial abstractions leak somewhat (Joel Spolsky's Law), minimize leakage by ensuring your interface doesn't expose internal constraints, infrastructure artifacts, or inconsistent behavior.
+Design abstractions around consumer needs, not implementation details. A leaky abstraction forces callers to understand the underlying system to use it correctly—defeating its purpose. While all non-trivial abstractions leak somewhat (Joel Spolsky's Law of Leaky Abstractions), minimize leakage by ensuring your interface doesn't expose internal constraints, infrastructure artifacts, or inconsistent behavior.
 
 ## Warning signs
 
@@ -30,21 +30,19 @@ Design abstractions around consumer needs, not implementation details. A leaky a
 - **Implementation-dependent error handling**: Callers must catch specific exceptions from underlying layers
 - **Required internal knowledge**: Using the abstraction safely requires understanding what's beneath it
 
-## Before/after example
+## Example
 
 ```ts
-// Leaky: Exposes database concerns, inconsistent signature
+// Leaky: exposes database concerns, inconsistent signatures
 interface ReservationRepository {
-  create(restaurantId: number, reservation: Reservation): number; // Returns DB ID
-  findById(id: string): Reservation | null; // No restaurantId needed?
+  create(restaurantId: number, reservation: Reservation): number; // returns DB ID
+  findById(id: string): Reservation | null; // why no restaurantId here?
   update(reservation: Reservation): void;
   connect(connectionString: string): void;
   disconnect(): void;
 }
-```
 
-```ts
-// Better: Consistent interface, infrastructure hidden
+// Better: consistent interface, infrastructure hidden
 interface ReservationRepository {
   create(restaurantId: number, reservation: Reservation): Promise<void>;
   findById(restaurantId: number, id: string): Promise<Reservation | null>;
@@ -61,11 +59,10 @@ class PostgresReservationRepository implements ReservationRepository {
 ## Practical guidance
 
 - Design interfaces for what callers need to do, not how you implement it
-- Keep signatures consistent—if one method needs context, all similar methods should accept it
-- Return domain types, not infrastructure artifacts (avoid returning raw database IDs)
+- Keep signatures consistent—if one method needs context, similar methods should too
+- Return domain types, not infrastructure artifacts (avoid raw database IDs)
 - Inject infrastructure dependencies through constructors, not method parameters
-- Normalize error handling so callers don't need to catch implementation-specific exceptions
-- Prefer focused interfaces over "fat" interfaces with unrelated methods
+- Normalize error handling so callers don't catch implementation-specific exceptions
 
 
 ---
@@ -98,20 +95,13 @@ function getDiscount(user: User | null) {
 }
 ```
 
-Guard clauses invert the condition and exit immediately, leaving the main logic at the top level with minimal indentation. Each guard documents a precondition the function requires.
-
-## When to use
-
-- Null/undefined checks
-- Permission or authorization checks
-- Validation of required preconditions
-- Empty collection checks (`if (items.length === 0) return []`)
+Guard clauses invert the condition and exit immediately, leaving the main logic at the top level with minimal indentation. Each guard documents a precondition the function requires—null checks, permission checks, validation, empty collections.
 
 ## When to reconsider
 
-- **Many guards accumulating**: If you need 5+ guard clauses, the function may have too many responsibilities—consider splitting it
-- **Guards with side effects**: Keep guards as pure condition checks; don't mix in logging, mutations, or complex logic
-- **Resource cleanup required**: In languages without RAII or `defer`, multiple returns can complicate cleanup (less relevant in JS/TS with garbage collection)
+- **Many guards accumulating**: 5+ guard clauses suggest the function has too many responsibilities
+- **Guards with side effects**: Keep guards as pure condition checks; don't mix in logging or mutations
+- **Resource cleanup required**: Multiple returns can complicate cleanup in languages without RAII or `defer` (less relevant in JS/TS with garbage collection)
 
 The goal is clarity, not dogma. A single well-placed `if-else` is fine when both branches represent equally valid paths rather than a precondition check.
 
@@ -120,48 +110,44 @@ The goal is clarity, not dogma. A single well-placed `if-else` is fine when both
 
 # Rule: File Naming Matches Contents
 
-Name files for what the module actually does. Use kebab-case and prefer verb–noun or domain–role names. Match the primary export; if you can’t name it crisply, split the file.
+Name files for what the module actually does. Use kebab-case and prefer verb-noun or domain-role names. Match the primary export; if you cannot name it crisply, split the file.
 
 ## Checklist
 
-- Use kebab-case; describe responsibility (verb–noun or domain–role).
-- Match the main export: `calculateUsageRate` → `calculate-usage-rate.ts`.
-- One responsibility per file; if you need two verbs, split.
-- Align with functional core/imperative shell:
+- Match the main export: `calculateUsageRate` goes in `calculate-usage-rate.ts`.
+- One responsibility per file; if you need two verbs, split it.
+- Align with functional core/imperative shell conventions:
   - Functional core: `calculate-…`, `validate-…`, `parse-…`, `format-…`, `aggregate-…`
   - Imperative shell: `…-route.ts`, `…-handler.ts`, `…-job.ts`, `…-cli.ts`, `…-script.ts`
-- Prefer specific domain nouns; avoid buckets like `utils`, `helpers`, `core`, `data`, `math`.
-- Use role suffixes only when they clarify architecture (e.g., `-service`, `-repository`).
-- Preserve history when renaming: `git mv old-name.ts new-name.ts`.
+- Prefer specific domain nouns; avoid generic buckets like `utils`, `helpers`, `core`, `data`, `math`.
+- Use role suffixes (`-service`, `-repository`) only when they clarify architecture.
 
-Example: `usage.core.ts` → split into `fetch-service-usage.ts` and `aggregate-usage.ts`.
+Example: A file named `usage.core.ts` containing both fetching and aggregation logic should be split into `fetch-service-usage.ts` and `aggregate-usage.ts`.
 
 
 ---
 
 # Rule: Functional Core, Imperative Shell
 
-Separate business logic from side effects by organizing code into a functional core and an imperative shell. The functional core contains pure, testable functions that operate only on provided data, free of I/O operations, database calls, or external state mutations. The imperative shell handles all side effects and orchestrates the functional core to perform business logic.
+Separate business logic from side effects by organizing code into a functional core and an imperative shell. The functional core contains pure functions that operate only on provided data, free of I/O, database calls, or state mutations. The imperative shell handles all side effects and orchestrates the core to perform work.
 
-This separation improves testability, maintainability, and reusability. Core logic can be tested in isolation without mocking external dependencies, and the imperative shell can be modified or swapped without changing business logic.
+This separation improves testability (core logic tests need no mocks), maintainability (shell can change without touching business rules), and reusability (core functions work in any context).
 
-Example of mixed logic and side effects:
+**Functional core:** filtering, mapping, calculations, validation, parsing, formatting, business rule evaluation.
+
+**Imperative shell:** HTTP handlers, database queries, file I/O, API calls, message queue operations, CLI entry points.
 
 ```ts
-// Bad: Logic and side effects are mixed
+// Bad: Logic and side effects mixed
 function sendUserExpiryEmail(): void {
   for (const user of db.getUsers()) {
     if (user.subscriptionEndDate > new Date()) continue;
     if (user.isFreeTrial) continue;
-    email.send(user.email, "Your account has expired " + user.name + ".");
+    email.send(user.email, `Your account has expired ${user.name}.`);
   }
 }
-```
 
-Refactored using functional core and imperative shell:
-
-```ts
-// Functional core - pure functions with no side effects
+// Good: Functional core (pure, testable)
 function getExpiredUsers(users: User[], cutoff: Date): User[] {
   return users.filter(
     (user) => user.subscriptionEndDate <= cutoff && !user.isFreeTrial,
@@ -175,36 +161,29 @@ function generateExpiryEmails(users: User[]): Array<[string, string]> {
   ]);
 }
 
-// Imperative shell - handles side effects
+// Imperative shell (orchestrates side effects)
 email.bulkSend(
   generateExpiryEmails(getExpiredUsers(db.getUsers(), new Date())),
 );
 ```
 
-The functional core functions can now be easily tested with sample data and reused for different purposes without modification.
+Core functions can now be tested with sample data and reused without modification.
 
 
 ---
 
 # Rule: Inline Obvious Code
 
-Keep simple, self-explanatory code inline rather than extracting it into functions. Every abstraction carries cognitive cost—readers must jump to another location, parse a function signature, and mentally track the context switch. For obvious logic, this overhead exceeds any benefit.
+Keep simple, self-explanatory code inline rather than extracting it into functions. Every abstraction carries cognitive cost—readers must jump to another location, parse a signature, and track context. For obvious logic, this overhead exceeds any benefit.
 
-> "Functions should be short and sweet, and do just one thing. They should fit on one or two screenfuls of text... and do one thing and do that well."
-> — Linux kernel coding style
-
-The key insight: extracting code into a function is not inherently virtuous. A function should exist because it encapsulates meaningful complexity, not because code appears twice.
+Extracting code into a function is not inherently virtuous. A function should exist because it encapsulates meaningful complexity, not because code appears twice.
 
 ## When to inline
 
-Inline code when:
-
-- The logic is immediately understandable (a few lines, no complex branching)
-- It appears in only one or two places
-- Extracting it would require reading the function definition to understand what happens
+Inline when the logic is immediately understandable, appears in only one or two places, or when extracting would require reading the function definition to understand what happens.
 
 ```ts
-// GOOD: Inline obvious logic—instantly readable
+// GOOD: Inline obvious logic
 if (removedFrom.length === 0) {
   return { ok: true, message: "No credentials found" };
 }
@@ -214,40 +193,15 @@ return { ok: true, message: `Removed from ${removedFrom.join(" and ")}` };
 return formatRemovalResult(removedFrom);
 ```
 
-Another example—null checks that don't need abstraction:
-
-```ts
-// GOOD: Simple null guard, inline
-function enrich(json: JsonObject, data: string | null): JsonObject {
-  if (data === null) return json;
-  return { ...json, data };
-}
-
-// BAD: Over-abstracted null-safe wrapper
-const enrichSafe = nullSafe((json, data) => ({ ...json, data }));
-```
-
-The second version adds a layer of indirection for a two-line null check. The abstraction costs more to understand than the duplication it eliminates.
-
 ## When to extract
 
-Extract into a function when:
-
-- The logic is complex enough that a name genuinely clarifies intent
-- You need to enforce consistent behavior across many call sites (not just two or three)
-- The function encapsulates a coherent concept that stands alone
-- Testing the logic in isolation provides real value
-- The number of local variables exceeds what you can track mentally (the Linux kernel uses ~10 as a threshold)
+Extract when the logic is complex enough that a name clarifies intent, you need consistent behavior across many call sites, the function encapsulates a coherent standalone concept, testing it in isolation provides value, or local variables exceed what you can track mentally.
 
 ## The wrong abstraction
 
-Sandi Metz observes that abstractions decay when requirements diverge:
+Abstractions decay when requirements diverge: programmer A extracts duplication into a shared function, programmer B adds a parameter for different behavior, and this repeats until the "abstraction" is a mess of conditionals. The result is harder to understand than the original duplication.
 
-1. Programmer A extracts duplication into a shared function
-2. Programmer B needs slightly different behavior, adds a parameter and conditional
-3. This repeats until the "abstraction" is a mess of parameters and branches
-
-The result is harder to understand than the original duplication. When an abstraction proves wrong, re-introduce duplication and let the code show you what's actually shared.
+When an abstraction proves wrong, re-introduce duplication and let the code show you what's actually shared.
 
 ```ts
 // Started as shared abstraction, became a mess
@@ -261,22 +215,19 @@ function NavButton({ label, url, icon, highlight, testId, onClick, disabled, bad
 <BuyButton highlight testId="buy-cta" />
 ```
 
-## Warning signs of bad extraction
+## Warning signs
 
-- **Conditional parameters**: Passing flags that determine which code path executes
+- **Conditional parameters**: Flags that determine which code path executes
 - **Single caller**: A "reusable" function called from exactly one place
-- **Name describes implementation**: `formatRemovalResult` vs. a name that describes _why_
-- **Reading the function is required**: The call site doesn't make sense without jumping to the definition
+- **Name describes implementation**: `formatRemovalResult` vs. a name describing _why_
+- **Reading the function is required**: The call site doesn't make sense without the definition
 - **Future-proofing**: "We might need this elsewhere" without concrete evidence
 
 ## The cognitive test
 
 Before extracting, ask: "Will readers understand this faster by reading the inline code or by jumping to a function definition?" If inline is faster, don't extract.
 
-> "Duplication is far cheaper than the wrong abstraction."
-> — Sandi Metz
-
-Three similar lines repeated twice cost less mental effort than a helper function that requires a context switch to understand. A single, direct block of code is cognitively cheaper than one fractured into pointless subroutines.
+> "Duplication is far cheaper than the wrong abstraction." — Sandi Metz
 
 
 ---
@@ -286,20 +237,18 @@ Three similar lines repeated twice cost less mental effort than a helper functio
 Write test assertions as concrete input/output examples, not computed values. Avoid operators, string concatenation, loops, and conditionals in test bodies—these obscure bugs and make tests harder to verify at a glance.
 
 ```ts
-// Bad: this test passes, but both production code and test share the same bug
 const baseUrl = "http://example.com/";
-function getPhotosUrl() {
-  return baseUrl + "/photos"; // Bug: produces "http://example.com//photos"
-}
-expect(getPhotosUrl()).toBe(baseUrl + "/photos"); // ✓ passes — bug hidden
 
-// Good: literal expected value reveals the bug immediately
-expect(getPhotosUrl()).toBe("http://example.com/photos"); // ✗ fails — bug caught
+// Bad: computed expectation hides bugs when test and production share the same error
+expect(getPhotosUrl()).toBe(baseUrl + "/photos"); // passes despite double-slash bug
+
+// Good: literal expected value catches the bug immediately
+expect(getPhotosUrl()).toBe("http://example.com/photos"); // fails, reveals the issue
 ```
 
 Unlike production code that handles varied inputs, tests verify specific cases. State expectations directly rather than computing them. When a test fails, the expected value should be immediately readable without mental evaluation.
 
-If test setup genuinely requires complex logic (fixtures, builders, shared assertions), extract it into dedicated test utilities with their own tests. Keep test bodies simple: arrange inputs, call the function, assert against literal expected values.
+Test utilities are acceptable for setup and data preparation—fixtures, builders, factories, mock configuration—but not for computing expected values. Keep assertion logic in the test body with literal expectations.
 
 
 ---
@@ -328,6 +277,8 @@ When accepting user input:
 - **Normalize case** when case doesn't matter (emails, usernames)
 - **Accept common variations** (with/without country code for phones, with/without protocol for URLs)
 
+**Never normalize passwords.** Users should be able to use any characters exactly as entered—normalizing passwords reduces entropy and can break legitimate credentials. The only acceptable transformation is Unicode normalization (NFC/NFKC) for cross-platform compatibility before hashing.
+
 The validation error should describe what's actually wrong with the data, not complain about formatting the computer could have handled.
 
 
@@ -335,7 +286,7 @@ The validation error should describe what's actually wrong with the data, not co
 
 # Rule: Test Functional Core
 
-Focus testing efforts on the functional core—pure functions with no side effects. These tests are fast, deterministic, and provide high value per line of test code. Do not write tests for the imperative shell (I/O, database calls, external services) unless the user explicitly requests them.
+Focus testing efforts on the functional core—pure functions with no side effects that operate only on provided data. These tests are fast, deterministic, and provide high value per line of test code. Do not write tests for the imperative shell (I/O, database calls, external services) unless the user explicitly requests them.
 
 Imperative shell tests require mocks, stubs, or integration infrastructure, making them slower to write, brittle to maintain, and harder to debug. The return on investment diminishes rapidly compared to functional core tests. When the functional core is well-tested, the imperative shell becomes thin orchestration code where bugs are easier to spot through review or manual testing.
 
@@ -361,13 +312,18 @@ If testing imperative shell code is explicitly requested, prefer integration tes
 
 # Rule: Use Git Mv
 
-Use `git mv <old> <new>` for renaming or moving tracked files in Git. It stages both deletion and addition in one command, preserves history for `git log --follow`, and is the only reliable method for case-only renames on case-insensitive filesystems (Windows/macOS).
+Use `git mv <old> <new>` for renaming or moving tracked files in Git. It stages both deletion and addition in one command and preserves history for `git log --follow`.
 
 ```bash
 git mv old-file.js new-file.js              # Simple rename
 git mv file.js src/utils/file.js            # Move to directory
-git mv readme.md README.md                  # Case-only change
 for f in *.test.js; do git mv "$f" tests/; done  # Multiple files (use shell loop)
+```
+
+For case-only renames on case-insensitive filesystems (Windows/macOS), use a two-step rename through a temporary name, since direct `git mv readme.md README.md` works inconsistently:
+
+```bash
+git mv readme.md readme-temp.md && git mv readme-temp.md README.md
 ```
 
 
@@ -539,7 +495,7 @@ Use this pattern when:
 
 - Validating user-provided file paths
 - Preventing path traversal attacks (e.g., `../../../etc/passwd`)
-- Ensuring files stay within a sandbox directory
+- Ensuring files stay within a designated base directory
 - Any path containment check that must work on Windows
 
 
@@ -594,114 +550,60 @@ Node.js 22.18+ and 24+ run `.ts` files natively without flags. External TypeScri
 
 # Rule: Any in Generics
 
-When building generic functions, you may need to use any inside the function body.
-
-This is because TypeScript often cannot match your runtime logic to the logic done inside your types.
-
-One example:
+Inside generic function bodies, `as any` is sometimes necessary because TypeScript cannot always correlate runtime control flow with conditional return types. Outside generic functions, use `any` extremely sparingly.
 
 ```ts
 const youSayGoodbyeISayHello = <TInput extends "hello" | "goodbye">(
   input: TInput,
 ): TInput extends "hello" ? "goodbye" : "hello" => {
   if (input === "goodbye") {
-    return "hello"; // Error!
-  } else {
-    return "goodbye"; // Error!
-  }
-};
-```
-
-On the type level (and the runtime), this function returns `goodbye` when the input is `hello`.
-
-There is no way to make this work concisely in TypeScript.
-
-So using `any` is the most concise solution:
-
-```ts
-const youSayGoodbyeISayHello = <TInput extends "hello" | "goodbye">(
-  input: TInput,
-): TInput extends "hello" ? "goodbye" : "hello" => {
-  if (input === "goodbye") {
-    return "hello" as any;
+    return "hello" as any; // TypeScript cannot verify this matches the conditional type
   } else {
     return "goodbye" as any;
   }
 };
 ```
 
-Outside of generic functions, use `any` extremely sparingly.
+The function signature is correct and type-safe for callers, but TypeScript cannot narrow the conditional return type based on the runtime `if` check. Using `as any` for the return value is the most concise workaround.
 
 
 ---
 
 # Rule: Default Exports
 
-Unless explicitly required by the framework, do not use default exports.
+Prefer named exports over default exports. Default exports allow arbitrary import names, which harms refactoring, IDE navigation, and codebase consistency.
 
 ```ts
-// BAD
-export default function myFunction() {
-  return <div>Hello</div>;
-}
+// Avoid: importers can rename arbitrarily
+export default function calculateTotal() { ... }
+import anything from "./calculate-total";
+
+// Prefer: name is enforced at import
+export function calculateTotal() { ... }
+import { calculateTotal } from "./calculate-total";
 ```
 
-```ts
-// GOOD
-export function myFunction() {
-  return <div>Hello</div>;
-}
-```
-
-Default exports create confusion from the importing file.
-
-```ts
-// BAD
-import myFunction from "./myFunction";
-```
-
-```ts
-// GOOD
-import { myFunction } from "./myFunction";
-```
-
-There are certain situations where a framework may require a default export. For instance, Next.js requires a default export for pages.
-
-```tsx
-// This is fine, if required by the framework
-export default function MyPage() {
-  return <div>Hello</div>;
-}
-```
+Use default exports only when a framework requires them (Next.js pages/layouts, etc.).
 
 
 ---
 
 # Rule: Discriminated Unions
 
-Proactively use discriminated unions to model data that can be in one of a few different shapes. For example, when sending events between environments:
+Use discriminated unions to model data that can be in one of several distinct shapes. Each variant shares a literal discriminant property (commonly `type`, `kind`, or `status`) that TypeScript uses to narrow the union.
 
 ```ts
 type UserCreatedEvent = {
   type: "user.created";
   data: { id: string; email: string };
 };
-
-type UserDeletedEvent = {
-  type: "user.deleted";
-  data: { id: string };
-};
-
+type UserDeletedEvent = { type: "user.deleted"; data: { id: string } };
 type Event = UserCreatedEvent | UserDeletedEvent;
-```
 
-Use switch statements to handle discriminated unions:
-
-```ts
 const handleEvent = (event: Event) => {
   switch (event.type) {
     case "user.created":
-      console.log(event.data.email);
+      console.log(event.data.email); // TypeScript knows `email` exists
       break;
     case "user.deleted":
       console.log(event.data.id);
@@ -710,19 +612,19 @@ const handleEvent = (event: Event) => {
 };
 ```
 
-Use discriminated unions to prevent the 'bag of optionals' problem.
+## Preventing the "bag of optionals" problem
 
-For example, when describing a fetching state:
+Discriminated unions eliminate impossible states that optional properties allow:
 
 ```ts
-// BAD - allows impossible states
+// BAD - allows impossible states like { status: "idle", data: someData }
 type FetchingState<TData> = {
   status: "idle" | "loading" | "success" | "error";
   data?: TData;
   error?: Error;
 };
 
-// GOOD - prevents impossible states
+// GOOD - each state carries only its valid properties
 type FetchingState<TData> =
   | { status: "idle" }
   | { status: "loading" }
@@ -730,21 +632,52 @@ type FetchingState<TData> =
   | { status: "error"; error: Error };
 ```
 
-In React props (e.g., polymorphic buttons), use for variants:
+## React props with variant-specific properties
+
+Use discriminated unions for polymorphic components where different variants require different props:
 
 ```ts
 type ButtonProps =
-  | { variant: 'solid'; color: string }
-  | { variant: 'outline'; borderWidth: number };
+  | { variant: "solid"; color: string }
+  | { variant: "outline"; borderWidth: number };
 
 function Button(props: ButtonProps) {
   switch (props.variant) {
-    case 'solid':
+    case "solid":
       return <button style={{ background: props.color }} />;
-    case 'outline':
+    case "outline":
       return <button style={{ borderWidth: props.borderWidth }} />;
   }
 }
+```
+
+## Representing discriminated unions with Zod
+
+Use `z.discriminatedUnion()` instead of `z.union()` for discriminated unions. Regular unions check each option in order until one passes, which is slow for large unions. Discriminated unions use the discriminator key for efficient parsing.
+
+```ts
+const MyResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("success"), data: z.string() }),
+  z.object({ status: z.literal("failed"), error: z.string() }),
+]);
+```
+
+Each option must be an object schema whose discriminator property is a literal value—typically `z.literal()`, `z.enum()`, `z.null()`, or `z.undefined()`.
+
+For complex cases, discriminated unions can be nested. Zod determines the optimal parsing strategy using discriminators at each level:
+
+```ts
+const BaseError = { status: z.literal("failed"), message: z.string() };
+const MyErrors = z.discriminatedUnion("code", [
+  z.object({ ...BaseError, code: z.literal(400) }),
+  z.object({ ...BaseError, code: z.literal(401) }),
+  z.object({ ...BaseError, code: z.literal(500) }),
+]);
+
+const MyResult = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("success"), data: z.string() }),
+  MyErrors,
+]);
 ```
 
 
@@ -754,21 +687,22 @@ function Button(props: ButtonProps) {
 
 Do not introduce new enums into the codebase. Retain existing enums.
 
-If you require enum-like behaviour, use an `as const` object:
+For enum-like behavior, use an `as const` object:
 
 ```ts
-const backendToFrontendEnum = {
+const Size = {
   xs: "EXTRA_SMALL",
   sm: "SMALL",
   md: "MEDIUM",
 } as const;
 
-type LowerCaseEnum = keyof typeof backendToFrontendEnum; // "xs" | "sm" | "md"
-
-type UpperCaseEnum = (typeof backendToFrontendEnum)[LowerCaseEnum]; // "EXTRA_SMALL" | "SMALL" | "MEDIUM"
+type SizeKey = keyof typeof Size; // "xs" | "sm" | "md"
+type SizeValue = (typeof Size)[SizeKey]; // "EXTRA_SMALL" | "SMALL" | "MEDIUM"
 ```
 
-Remember that numeric enums behave differently to string enums. Numeric enums produce a reverse mapping:
+## Numeric Enum Pitfall
+
+Numeric enums produce a reverse mapping, doubling the number of keys:
 
 ```ts
 enum Direction {
@@ -778,43 +712,25 @@ enum Direction {
   Right,
 }
 
-const direction = Direction.Up; // 0
-const directionName = Direction[0]; // "Up"
+Direction.Up; // 0
+Direction[0]; // "Up"
+Object.keys(Direction).length; // 8 (not 4)
 ```
 
-This means that the enum `Direction` above will have eight keys instead of four.
-
-```ts
-enum Direction {
-  Up,
-  Down,
-  Left,
-  Right,
-}
-
-Object.keys(Direction).length; // 8
-```
+String enums do not have this behavior.
 
 
 ---
 
 # Rule: Error Result Types
 
-Think carefully before implementing code that throws errors.
-
-If a thrown error produces a desirable outcome in the system, go for it. For instance, throwing a custom error inside a backend framework's request handler.
-
-However, for code that you would need a manual try catch for, consider using a result type instead:
+Throwing errors is fine when framework infrastructure handles them (e.g., a backend request handler returning HTTP 500). For operations where callers must handle failure explicitly, use a result type instead of `try`/`catch`:
 
 ```ts
 type Result<T, E extends Error> =
   | { ok: true; value: T }
   | { ok: false; error: E };
-```
 
-For example, when parsing JSON:
-
-```ts
 const parseJson = (input: string): Result<unknown, Error> => {
   try {
     return { ok: true, value: JSON.parse(input) };
@@ -822,19 +738,16 @@ const parseJson = (input: string): Result<unknown, Error> => {
     return { ok: false, error: error as Error };
   }
 };
-```
 
-This way you can handle the error in the caller:
-
-```ts
 const result = parseJson('{"name": "John"}');
-
 if (result.ok) {
   console.log(result.value);
 } else {
   console.error(result.error);
 }
 ```
+
+Result types make error handling explicit at call sites and let the compiler enforce that failures are addressed.
 
 
 ---
@@ -844,58 +757,40 @@ if (result.ok) {
 Use `eslint --print-config` to check if a rule is enabled in the resolved configuration. This queries ESLint's actual computed config rather than searching config files for text strings.
 
 ```bash
-# Simple example
+# Check a simple rule
 pnpm exec eslint --print-config src/index.ts | jq -e '.rules["no-console"][0]'
-```
 
-```bash
-# Complex example (namespaced rule)
+# Check a namespaced rule
 pnpm exec eslint --print-config src/index.ts | jq -e '.rules["@typescript-eslint/no-unnecessary-type-parameters"][0]'
-# Returns: 2 (error), 1 (warn), 0 (off)
-# Exit code 1 if rule not found
 ```
 
-The `-e` flag makes jq exit with code 1 when the result is null, useful for scripting.
+Returns `2` (error), `1` (warn), or `0` (off). The `-e` flag makes jq exit with code 1 when the result is null, useful for scripting.
 
 
 ---
 
 # Rule: Import Type
 
-Use import type whenever you are importing a type.
-
-Prefer top-level `import type` over inline `import { type ... }`.
+Use `import type` for type-only imports. Prefer top-level `import type` over inline `import { type ... }`.
 
 ```ts
-// BAD
+// BAD - may leave behind an empty import after transpilation
 import { type User } from "./user";
-```
 
-```ts
-// GOOD
+// GOOD - entirely erased at compile time
 import type { User } from "./user";
 ```
 
-The reason for this is that in certain environments, the first version's import will not be erased. So you'll be left with:
-
-```ts
-// Before transpilation
-import { type User } from "./user";
-
-// After transpilation
-import "./user";
-```
+Inline type qualifiers can leave empty `import {}` statements in the emitted JavaScript, causing unnecessary side-effect imports. Top-level `import type` guarantees complete erasure.
 
 
 ---
 
 # Rule: JSDoc Comments
 
-Use JSDoc comments to annotate functions and types.
+Add JSDoc comments only when a function's behavior is not self-evident from its name and signature. Keep comments concise—describe intent or non-obvious behavior, not implementation details.
 
-Be concise in JSDoc comments, and only provide JSDoc comments if the function's behaviour is not self-evident.
-
-Use the JSDoc inline `@link` tag to link to other functions and types within the same file.
+Use `{@link SymbolName}` to create clickable references to other functions, types, or classes. This works across files and updates automatically when symbols are renamed.
 
 ```ts
 /**
@@ -904,7 +799,7 @@ Use the JSDoc inline `@link` tag to link to other functions and types within the
 const subtract = (a: number, b: number) => a - b;
 
 /**
- * Does the opposite to {@link subtract}
+ * Does the opposite of {@link subtract}
  */
 const add = (a: number, b: number) => a + b;
 ```
@@ -914,16 +809,20 @@ const add = (a: number, b: number) => a + b;
 
 # Rule: No Barrel Files
 
-Avoid barrel files (index.ts/index.js that re-export siblings) in application code. Import modules directly or via private subpath imports defined in package.json so dependencies stay explicit and you don’t inflate the module graph or create import cycles. Use a barrel only for a library entrypoint referenced by package.json, keep it pure re-exports (no side effects or constants), avoid `export *`, and never import that barrel from within the same package.
+Avoid barrel files (`index.ts`/`index.js` that re-export siblings) in application code. They inflate the module graph, slow builds and tests, and risk circular dependencies. Import modules directly or via package.json subpath imports (`#imports`) to keep dependencies explicit.
 
-Example:
+Use a barrel only for a library entrypoint referenced by package.json. When you do:
+
+- Keep it to pure re-exports (no side effects or constants)
+- Use named exports, not `export *`
+- Never import the barrel from within the same package
 
 ```ts
-// Avoid (barrel)
-// src/tab/index.ts
+// Avoid: barrel file
+// src/components/tab/index.ts
 export { TabList } from "./tab-list";
 
-// Prefer direct import
+// Prefer: direct import
 import { TabList } from "#components/tab/tab-list";
 ```
 
@@ -932,24 +831,19 @@ import { TabList } from "#components/tab/tab-list";
 
 # Rule: No Unchecked Indexed Access
 
-If the user has this rule enabled in their `tsconfig.json`, indexing into objects and arrays will behave differently from how you expect.
+When `noUncheckedIndexedAccess` is enabled in `tsconfig.json`, indexing into arrays and objects returns `T | undefined` rather than `T`. Handle the potential `undefined` value instead of assuming the index exists.
 
 ```ts
-const obj: Record<string, string> = {};
+const arr: string[] = ["a", "b"];
+const obj: Record<string, string> = { foo: "bar" };
 
-// With noUncheckedIndexedAccess, value will
-// be `string | undefined`
-// Without it, value will be `string`
-const value = obj.key;
-```
+// With noUncheckedIndexedAccess enabled:
+const first = arr[0]; // string | undefined
+const value = obj.key; // string | undefined
 
-```ts
-const arr: string[] = [];
-
-// With noUncheckedIndexedAccess, value will
-// be `string | undefined`
-// Without it, value will be `string`
-const value = arr[0];
+// Without it:
+const first = arr[0]; // string
+const value = obj.key; // string
 ```
 
 
@@ -957,74 +851,48 @@ const value = arr[0];
 
 # Rule: Optional Properties
 
-Use optional properties extremely sparingly. Only use them when the property is truly optional, and consider whether bugs may be caused by a failure to pass the property.
-
-In the example below we always want to pass user ID to `AuthOptions`. This is because if we forget to pass it somewhere in the code base, it will cause our function to be not authenticated.
+Prefer `T | undefined` over optional properties (`?`) when callers must always explicitly provide a value. Optional properties allow omission at call sites, which can mask bugs when a property is required but forgotten.
 
 ```ts
-// BAD
-type AuthOptions = {
-  userId?: string;
-};
+// BAD: forgetting userId silently compiles
+type AuthOptions = { userId?: string };
 
-const func = (options: AuthOptions) => {
-  const userId = options.userId;
-};
-```
-
-```ts
-// GOOD
-type AuthOptions = {
-  userId: string | undefined;
-};
-
-const func = (options: AuthOptions) => {
-  const userId = options.userId;
-};
+// GOOD: forces explicit decision at call site
+type AuthOptions = { userId: string | undefined };
 ```
 
 ## Exception: React Props with Defaults
 
-Optional properties ARE acceptable in React props when combined with default parameters in the function signature:
+Optional properties are acceptable in React props when combined with default parameters:
 
 ```ts
-// Type with optional property
 type ButtonProps = {
   variant?: 'solid' | 'outline';
   size?: 'sm' | 'md' | 'lg';
 };
 
-// Function parameter provides the default
 function Button({ variant = 'solid', size = 'md' }: ButtonProps) {
-  // variant and size are guaranteed to have values here
   return <button className={`${variant} ${size}`} />;
 }
 ```
 
-This pattern is safe because:
-
-- The default parameter ensures the value is never undefined inside the component
-- Omitting the prop at the call site is intentional and clear: `<Button />`
-- The default value is documented in one place (the function signature)
-
-Avoid this pattern for:
-
-- Non-React function parameters where callers might forget required config
-- Props without sensible defaults that should force explicit decisions
-- Situations where forgetting to pass the prop would cause bugs
+This is safe because the default parameter guarantees a value inside the component, and omitting the prop at the call site (`<Button />`) is intentional. Avoid this pattern for props without sensible defaults or where omission would cause bugs.
 
 
 ---
 
 # Rule: Package Manager Execution
 
-In pnpm projects, use `pnpm exec` to run locally installed binaries. Do not use `pnpx`, which is an alias for `pnpm dlx` that downloads packages from the registry and ignores local installations. Use `pnpx` only for one-off commands where you want to run a package without installing it locally.
+How different package manager commands resolve binaries:
 
-```bash
-pnpm exec tsc --noEmit    # ✅ Uses local package
-npx tsc --noEmit          # ✅ Uses local package
-pnpx tsc --noEmit         # ❌ Downloads from registry, ignores local
-```
+| Command           | Behavior                                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| `pnpm exec foo`   | Runs from `./node_modules/.bin`; falls back to system PATH              |
+| `pnpx foo`        | Always fetches from registry (uses dlx cache); ignores local installs   |
+| `npx foo`         | Checks local `node_modules/.bin` → global → downloads from registry     |
+| `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
+
+`pnpx` is an alias for `pnpm dlx`.
 
 
 ---
@@ -1045,7 +913,7 @@ const User = z.object({
   roles: z.array(z.string()).min(1),
 });
 
-type User = z.infer<typeof User>; // { id: string; email: string; roles: string[] }
+type User = z.infer<typeof User>;
 
 // Parse at the boundary - downstream code receives typed data
 function handleRequest(body: unknown): User {
@@ -1053,31 +921,21 @@ function handleRequest(body: unknown): User {
 }
 ```
 
-With parsing, downstream code receives a fully typed `User` with runtime-guaranteed non-empty roles. If requirements change, update the schema and the compiler surfaces all affected code.
-
 ## Practical guidance
 
-- **Parse at system boundaries.** Convert external input (JSON, environment variables, API responses) to precise domain types as early as possible, before any processing occurs. Zod's `.parse()` or `.safeParse()` handles this cleanly.
-- **Strengthen argument types, don't weaken return types.** Instead of returning `T | undefined`, require callers to provide already-parsed data.
-- **Let schemas drive data structures.** If a function needs a guarantee (non-empty array, positive number, valid email), define a schema that encodes that guarantee and accept the inferred type.
-- **Treat `void`-returning checks with suspicion.** A function that validates but returns nothing is easy to forget. Prefer Zod schemas that return refined types.
-- **Use `.refine()` for custom constraints.** When Zod's built-in validators aren't enough, add refinements that preserve type information.
+- **Parse at system boundaries.** Convert external input (JSON, environment variables, API responses) to precise domain types early. Use `.parse()` or `.safeParse()`.
+- **Strengthen argument types.** Instead of returning `T | undefined`, require callers to provide already-parsed data.
+- **Let schemas encode constraints.** If a function needs a non-empty array, positive number, or valid email, define a schema that encodes that guarantee.
+- **Treat `void`-returning checks with suspicion.** A function that validates but returns nothing is easy to forget.
+- **Use `.refine()` for custom constraints.** When built-in validators aren't enough, add refinements that preserve type information.
 
 ```ts
-import * as z from "zod";
-
-// Custom constraint with .refine() - type is preserved
+// Custom constraint with .refine()
 const PositiveInt = z
   .number()
   .int()
   .refine((n) => n > 0, "must be positive");
-
-type PositiveInt = z.infer<typeof PositiveInt>; // number (branded at runtime by validation)
-
-// Non-empty array - constraint enforced at parse time
-const ConfigDirs = z.array(z.string()).min(1);
-
-type ConfigDirs = z.infer<typeof ConfigDirs>; // string[] (non-empty enforced at runtime)
+type PositiveInt = z.infer<typeof PositiveInt>;
 ```
 
 
@@ -1085,9 +943,7 @@ type ConfigDirs = z.infer<typeof ConfigDirs>; // string[] (non-empty enforced at
 
 # Rule: Return Types
 
-When declaring functions on the top-level of a module,
-declare their return types. This will help future AI
-assistants understand the function's purpose.
+Annotate return types on top-level module functions. Explicit return types document intent, catch incomplete implementations at the definition site, and help AI assistants understand function purpose.
 
 ```ts
 const myFunc = (): string => {
@@ -1095,17 +951,10 @@ const myFunc = (): string => {
 };
 ```
 
-One exception to this is components which return JSX.
-No need to declare the return type of a component,
-as it is always JSX.
+**Exceptions:**
 
-```tsx
-const MyComponent = () => {
-  return <div>Hello</div>;
-};
-```
-
-For React hooks returning objects, annotate: `(): { state: string; }`.
+- React components returning JSX need no annotation—the return type is always `JSX.Element` or similar.
+- React hooks returning objects should still annotate: `(): { state: string; }`.
 
 
 ---
