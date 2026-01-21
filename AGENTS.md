@@ -1,19 +1,8 @@
 # Rule: `askpplx` CLI Usage
 
-**MANDATORY:** Run `npx -y askpplx --help` at the start of every agent session to learn available options and confirm the tool is working.
+**At session start:** Run `npx -y askpplx --help` to confirm the tool works and learn available options.
 
-Use `askpplx` to query Perplexity, an AI search engine combining real-time web search with advanced language models.
-
-## Why This Matters
-
-- **Ground your knowledge:** Your training data has a cutoff date. Real-time search ensures you work with current information—correct API signatures, latest versions, up-to-date best practices.
-- **Save time and resources:** A quick lookup is far cheaper than debugging hallucinated code or explaining why an approach failed. When in doubt, verify first.
-- **Reduce false confidence:** Even when you feel certain, external verification catches subtle errors before they compound into larger problems.
-- **Stay current:** Libraries change, APIs deprecate, patterns evolve. What was correct six months ago may be wrong today.
-
-## Usage Guidelines
-
-Use concise prompts for quick facts and focused questions for deeper topics. If results are unexpected, refine your query and ask again. Verification is fast and cheap—prefer looking up information over making assumptions.
+Use `askpplx` to query Perplexity search engine for real-time web search. Use it to verify facts before acting. A lookup is far cheaper than debugging hallucinated code or explaining why an approach failed. Verification is fast and cheap—prefer looking up information over making assumptions. When in doubt, verify.
 
 
 ---
@@ -69,24 +58,9 @@ class PostgresReservationRepository implements ReservationRepository {
 
 # Rule: Early Returns
 
-Use guard clauses to handle edge cases and invalid states at the top of a function, then return early. This flattens nested conditionals, makes the happy path obvious, and reduces cognitive load.
+Handle edge cases and invalid states at the top of a function with guard clauses that return early. This flattens nested conditionals and keeps the happy path obvious.
 
 ```ts
-// Nested (hard to follow)
-function getDiscount(user: User | null) {
-  if (user) {
-    if (user.isActive) {
-      if (user.membership === "premium") {
-        return 0.2;
-      } else {
-        return 0.1;
-      }
-    }
-  }
-  return 0;
-}
-
-// Flat (guard clauses)
 function getDiscount(user: User | null) {
   if (!user) return 0;
   if (!user.isActive) return 0;
@@ -95,15 +69,7 @@ function getDiscount(user: User | null) {
 }
 ```
 
-Guard clauses invert the condition and exit immediately, leaving the main logic at the top level with minimal indentation. Each guard documents a precondition the function requires—null checks, permission checks, validation, empty collections.
-
-## When to reconsider
-
-- **Many guards accumulating**: 5+ guard clauses suggest the function has too many responsibilities
-- **Guards with side effects**: Keep guards as pure condition checks; don't mix in logging or mutations
-- **Resource cleanup required**: Multiple returns can complicate cleanup in languages without RAII or `defer` (less relevant in JS/TS with garbage collection)
-
-The goal is clarity, not dogma. A single well-placed `if-else` is fine when both branches represent equally valid paths rather than a precondition check.
+Invert conditions and exit immediately—null checks, permission checks, validation, empty collections. Main logic stays at the top level with minimal indentation.
 
 
 ---
@@ -284,6 +250,50 @@ The validation error should describe what's actually wrong with the data, not co
 
 ---
 
+# Rule: Parse, Don't Validate
+
+When checking input data, return a refined type that preserves the knowledge gained—don't just validate and discard. Validation functions that return `void` or throw errors force callers to re-check conditions or handle "impossible" cases. Parsing functions that return more precise types eliminate redundant checks and let the compiler catch inconsistencies.
+
+Zod embodies this principle: every schema is a parser that transforms `unknown` input into a typed output. Use Zod at system boundaries to parse external data into domain types.
+
+```ts
+import * as z from "zod";
+
+// Schema defines both validation rules AND the resulting type
+const User = z.object({
+  id: z.string(),
+  email: z.email(),
+  roles: z.array(z.string()).min(1),
+});
+
+type User = z.infer<typeof User>;
+
+// Parse at the boundary - downstream code receives typed data
+function handleRequest(body: unknown): User {
+  return User.parse(body); // throws ZodError if invalid
+}
+```
+
+## Practical guidance
+
+- **Parse at system boundaries.** Convert external input (JSON, environment variables, API responses) to precise domain types early. Use `.parse()` or `.safeParse()`.
+- **Strengthen argument types.** Instead of returning `T | undefined`, require callers to provide already-parsed data.
+- **Let schemas encode constraints.** If a function needs a non-empty array, positive number, or valid email, define a schema that encodes that guarantee.
+- **Treat `void`-returning checks with suspicion.** A function that validates but returns nothing is easy to forget.
+- **Use `.refine()` for custom constraints.** When built-in validators aren't enough, add refinements that preserve type information.
+
+```ts
+// Custom constraint with .refine()
+const PositiveInt = z
+  .number()
+  .int()
+  .refine((n) => n > 0, "must be positive");
+type PositiveInt = z.infer<typeof PositiveInt>;
+```
+
+
+---
+
 # Rule: Test Functional Core
 
 Focus testing efforts on the functional core—pure functions with no side effects that operate only on provided data. These tests are fast, deterministic, and provide high value per line of test code. Do not write tests for the imperative shell (I/O, database calls, external services) unless the user explicitly requests them.
@@ -306,25 +316,6 @@ Imperative shell tests require mocks, stubs, or integration infrastructure, maki
 - Message queue consumers/producers
 
 If testing imperative shell code is explicitly requested, prefer integration tests over unit tests with mocks—they catch real issues and are less likely to break when implementation details change.
-
-
----
-
-# Rule: Use Git Mv
-
-Use `git mv <old> <new>` for renaming or moving tracked files in Git. It stages both deletion and addition in one command and preserves history for `git log --follow`.
-
-```bash
-git mv old-file.js new-file.js              # Simple rename
-git mv file.js src/utils/file.js            # Move to directory
-for f in *.test.js; do git mv "$f" tests/; done  # Multiple files (use shell loop)
-```
-
-For case-only renames on case-insensitive filesystems (Windows/macOS), use a two-step rename through a temporary name, since direct `git mv readme.md README.md` works inconsistently:
-
-```bash
-git mv readme.md readme-temp.md && git mv readme-temp.md README.md
-```
 
 
 ---
@@ -548,46 +539,6 @@ Node.js 22.18+ and 24+ run `.ts` files natively without flags. External TypeScri
 
 ---
 
-# Rule: Any in Generics
-
-Inside generic function bodies, `as any` is sometimes necessary because TypeScript cannot always correlate runtime control flow with conditional return types. Outside generic functions, use `any` extremely sparingly.
-
-```ts
-const youSayGoodbyeISayHello = <TInput extends "hello" | "goodbye">(
-  input: TInput,
-): TInput extends "hello" ? "goodbye" : "hello" => {
-  if (input === "goodbye") {
-    return "hello" as any; // TypeScript cannot verify this matches the conditional type
-  } else {
-    return "goodbye" as any;
-  }
-};
-```
-
-The function signature is correct and type-safe for callers, but TypeScript cannot narrow the conditional return type based on the runtime `if` check. Using `as any` for the return value is the most concise workaround.
-
-
----
-
-# Rule: Default Exports
-
-Prefer named exports over default exports. Default exports allow arbitrary import names, which harms refactoring, IDE navigation, and codebase consistency.
-
-```ts
-// Avoid: importers can rename arbitrarily
-export default function calculateTotal() { ... }
-import anything from "./calculate-total";
-
-// Prefer: name is enforced at import
-export function calculateTotal() { ... }
-import { calculateTotal } from "./calculate-total";
-```
-
-Use default exports only when a framework requires them (Next.js pages/layouts, etc.).
-
-
----
-
 # Rule: Discriminated Unions
 
 Use discriminated unions to model data that can be in one of several distinct shapes. Each variant shares a literal discriminant property (commonly `type`, `kind`, or `status`) that TypeScript uses to narrow the union.
@@ -807,23 +758,16 @@ const add = (a: number, b: number) => a + b;
 
 ---
 
-# Rule: No Barrel Files
+# Rule: Module Exports
 
-Avoid barrel files (`index.ts`/`index.js` that re-export siblings) in application code. They inflate the module graph, slow builds and tests, and risk circular dependencies. Import modules directly or via package.json subpath imports (`#imports`) to keep dependencies explicit.
-
-Use a barrel only for a library entrypoint referenced by package.json. When you do:
-
-- Keep it to pure re-exports (no side effects or constants)
-- Use named exports, not `export *`
-- Never import the barrel from within the same package
+Don't use default exports. Don't use barrel files (`index.ts` that re-exports siblings). Both add indirection that breaks the link between an import and its source—default exports let importers pick arbitrary names, barrels route imports through an intermediary. This harms refactoring, IDE navigation, and build performance.
 
 ```ts
-// Avoid: barrel file
-// src/components/tab/index.ts
-export { TabList } from "./tab-list";
+// Avoid
+import calc from "#components";
 
-// Prefer: direct import
-import { TabList } from "#components/tab/tab-list";
+// Prefer
+import { calculateTotal } from "#utils/calculate-total";
 ```
 
 
@@ -893,50 +837,6 @@ How different package manager commands resolve binaries:
 | `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
 
 `pnpx` is an alias for `pnpm dlx`.
-
-
----
-
-# Rule: Parse, Don't Validate
-
-When checking input data, return a refined type that preserves the knowledge gained—don't just validate and discard. Validation functions that return `void` or throw errors force callers to re-check conditions or handle "impossible" cases. Parsing functions that return more precise types eliminate redundant checks and let the compiler catch inconsistencies.
-
-Zod embodies this principle: every schema is a parser that transforms `unknown` input into a typed output. Use Zod at system boundaries to parse external data into domain types.
-
-```ts
-import * as z from "zod";
-
-// Schema defines both validation rules AND the resulting type
-const User = z.object({
-  id: z.string(),
-  email: z.email(),
-  roles: z.array(z.string()).min(1),
-});
-
-type User = z.infer<typeof User>;
-
-// Parse at the boundary - downstream code receives typed data
-function handleRequest(body: unknown): User {
-  return User.parse(body); // throws ZodError if invalid
-}
-```
-
-## Practical guidance
-
-- **Parse at system boundaries.** Convert external input (JSON, environment variables, API responses) to precise domain types early. Use `.parse()` or `.safeParse()`.
-- **Strengthen argument types.** Instead of returning `T | undefined`, require callers to provide already-parsed data.
-- **Let schemas encode constraints.** If a function needs a non-empty array, positive number, or valid email, define a schema that encodes that guarantee.
-- **Treat `void`-returning checks with suspicion.** A function that validates but returns nothing is easy to forget.
-- **Use `.refine()` for custom constraints.** When built-in validators aren't enough, add refinements that preserve type information.
-
-```ts
-// Custom constraint with .refine()
-const PositiveInt = z
-  .number()
-  .int()
-  .refine((n) => n > 0, "must be positive");
-type PositiveInt = z.infer<typeof PositiveInt>;
-```
 
 
 ---
