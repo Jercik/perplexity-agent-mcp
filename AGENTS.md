@@ -1,11 +1,16 @@
+# Rule: Mandatory Startup Reads
+
+Before taking any action—answering questions, editing files, or running commands—read these files in order:
+
+- **@README.md** — Project overview and context
+
+If a file does not exist, skip it silently and continue.
+
 # Rule: `askpplx` CLI Usage
 
 **At session start:** Run `npx -y askpplx --help` to confirm the tool works and learn available options.
 
-Use `askpplx` to query Perplexity search engine for real-time web search. Use it to verify facts before acting. A lookup is far cheaper than debugging hallucinated code or explaining why an approach failed. Verification is fast and cheap—prefer looking up information over making assumptions. When in doubt, verify.
-
-
----
+Use `askpplx` to query Perplexity for real-time web search. Use it to verify external facts before acting—documentation, API behavior, library versions, best practices. A lookup is far cheaper than debugging hallucinated code or explaining why an approach failed. Verification is fast and cheap—prefer looking up information over making assumptions. When in doubt, verify.
 
 # Rule: Avoid Leaky Abstractions
 
@@ -53,9 +58,6 @@ class PostgresReservationRepository implements ReservationRepository {
 - Inject infrastructure dependencies through constructors, not method parameters
 - Normalize error handling so callers don't catch implementation-specific exceptions
 
-
----
-
 # Rule: Early Returns
 
 Handle edge cases and invalid states at the top of a function with guard clauses that return early. This flattens nested conditionals and keeps the happy path obvious.
@@ -70,9 +72,6 @@ function getDiscount(user: User | null) {
 ```
 
 Invert conditions and exit immediately—null checks, permission checks, validation, empty collections. Main logic stays at the top level with minimal indentation.
-
-
----
 
 # Rule: File Naming Matches Contents
 
@@ -89,9 +88,6 @@ Name files for what the module actually does. Use kebab-case and prefer verb-nou
 - Use role suffixes (`-service`, `-repository`) only when they clarify architecture.
 
 Example: A file named `usage.core.ts` containing both fetching and aggregation logic should be split into `fetch-service-usage.ts` and `aggregate-usage.ts`.
-
-
----
 
 # Rule: Functional Core, Imperative Shell
 
@@ -135,18 +131,11 @@ email.bulkSend(
 
 Core functions can now be tested with sample data and reused without modification.
 
-
----
-
 # Rule: Inline Obvious Code
 
 Keep simple, self-explanatory code inline rather than extracting it into functions. Every abstraction carries cognitive cost—readers must jump to another location, parse a signature, and track context. For obvious logic, this overhead exceeds any benefit.
 
 Extracting code into a function is not inherently virtuous. A function should exist because it encapsulates meaningful complexity, not because code appears twice.
-
-## When to inline
-
-Inline when the logic is immediately understandable, appears in only one or two places, or when extracting would require reading the function definition to understand what happens.
 
 ```ts
 // GOOD: Inline obvious logic
@@ -161,42 +150,11 @@ return formatRemovalResult(removedFrom);
 
 ## When to extract
 
-Extract when the logic is complex enough that a name clarifies intent, you need consistent behavior across many call sites, the function encapsulates a coherent standalone concept, testing it in isolation provides value, or local variables exceed what you can track mentally.
+Extract when a name clarifies complex intent, you need consistent behavior across many call sites, the function encapsulates a coherent standalone concept, or testing it in isolation provides value. Don't extract for single callers, because "we might need this elsewhere," or when the name describes implementation rather than purpose.
 
 ## The wrong abstraction
 
-Abstractions decay when requirements diverge: programmer A extracts duplication into a shared function, programmer B adds a parameter for different behavior, and this repeats until the "abstraction" is a mess of conditionals. The result is harder to understand than the original duplication.
-
-When an abstraction proves wrong, re-introduce duplication and let the code show you what's actually shared.
-
-```ts
-// Started as shared abstraction, became a mess
-function NavButton({ label, url, icon, highlight, testId, onClick, disabled, badge }) {
-  // 50 lines of conditional logic for "shared" button
-}
-
-// Better: Accept that these aren't the same thing
-<HomeButton />
-<AboutButton />
-<BuyButton highlight testId="buy-cta" />
-```
-
-## Warning signs
-
-- **Conditional parameters**: Flags that determine which code path executes
-- **Single caller**: A "reusable" function called from exactly one place
-- **Name describes implementation**: `formatRemovalResult` vs. a name describing _why_
-- **Reading the function is required**: The call site doesn't make sense without the definition
-- **Future-proofing**: "We might need this elsewhere" without concrete evidence
-
-## The cognitive test
-
-Before extracting, ask: "Will readers understand this faster by reading the inline code or by jumping to a function definition?" If inline is faster, don't extract.
-
-> "Duplication is far cheaper than the wrong abstraction." — Sandi Metz
-
-
----
+Abstractions decay when requirements diverge: programmer A extracts duplication into a shared function, programmer B adds a parameter for different behavior, and this repeats until the "abstraction" is a mess of conditionals. When an abstraction proves wrong, re-introduce duplication and let the code show you what's actually shared. Duplication is far cheaper than the wrong abstraction.
 
 # Rule: No Logic in Tests
 
@@ -215,9 +173,6 @@ expect(getPhotosUrl()).toBe("http://example.com/photos"); // fails, reveals the 
 Unlike production code that handles varied inputs, tests verify specific cases. State expectations directly rather than computing them. When a test fails, the expected value should be immediately readable without mental evaluation.
 
 Test utilities are acceptable for setup and data preparation—fixtures, builders, factories, mock configuration—but not for computing expected values. Keep assertion logic in the test body with literal expectations.
-
-
----
 
 # Rule: Normalize User Input
 
@@ -246,9 +201,6 @@ When accepting user input:
 **Never normalize passwords.** Users should be able to use any characters exactly as entered—normalizing passwords reduces entropy and can break legitimate credentials. The only acceptable transformation is Unicode normalization (NFC/NFKC) for cross-platform compatibility before hashing.
 
 The validation error should describe what's actually wrong with the data, not complain about formatting the computer could have handled.
-
-
----
 
 # Rule: Parse, Don't Validate
 
@@ -291,9 +243,6 @@ const PositiveInt = z
 type PositiveInt = z.infer<typeof PositiveInt>;
 ```
 
-
----
-
 # Rule: Test Functional Core
 
 Focus testing efforts on the functional core—pure functions with no side effects that operate only on provided data. These tests are fast, deterministic, and provide high value per line of test code. Do not write tests for the imperative shell (I/O, database calls, external services) unless the user explicitly requests them.
@@ -316,9 +265,6 @@ Imperative shell tests require mocks, stubs, or integration infrastructure, maki
 - Message queue consumers/producers
 
 If testing imperative shell code is explicitly requested, prefer integration tests over unit tests with mocks—they catch real issues and are less likely to break when implementation details change.
-
-
----
 
 # Rule: Child Process Selection
 
@@ -401,9 +347,6 @@ if (result.error) console.error(result.error);
 if (result.status !== 0) console.error(`Exit code: ${result.status}`);
 console.log(result.stdout.toString());
 ```
-
-
----
 
 # Rule: Cross-Platform Path Validation
 
@@ -489,9 +432,6 @@ Use this pattern when:
 - Ensuring files stay within a designated base directory
 - Any path containment check that must work on Windows
 
-
----
-
 # Rule: Import Metadata from package.json
 
 Import name, version, and description directly from package.json to maintain a single source of truth for your package metadata. In Node.js 20.10+ use `with { type: "json" }` syntax (the older `assert` keyword is deprecated); ensure TypeScript's `resolveJsonModule` is enabled in tsconfig.json. This approach eliminates manual version synchronization and reduces maintenance errors when updating package information. Always import from the nearest package.json using relative paths to ensure correct metadata for monorepo packages.
@@ -504,9 +444,6 @@ const program = new Command()
   .description(packageJson.description)
   .version(packageJson.version);
 ```
-
-
----
 
 # Rule: Package.json Imports
 
@@ -521,23 +458,24 @@ Use `package.json` "imports" field with `#` prefixes to create stable internal m
 }
 ```
 
+# Rule: Native TypeScript Execution
 
----
-
-# Rule: Run TypeScript Natively
-
-Run TypeScript files directly with `node`. Do not use `tsx`, `ts-node`, or other external runners.
+Node.js 22.18+ and 24+ run `.ts` files natively without flags or external tools like `tsx` or `ts-node`.
 
 ```bash
-node script.ts           # ✅ Correct
-tsx script.ts            # ❌ Unnecessary
-pnpm exec tsx script.ts  # ❌ Unnecessary
+node script.ts
 ```
 
-Node.js 22.18+ and 24+ run `.ts` files natively without flags. External TypeScript runners add unnecessary dependencies and complexity.
+For Node.js 22.6–22.17, use `--experimental-strip-types`. Older versions require a TypeScript runner.
 
+# Rule: Use `repoq` for Repository Queries
 
----
+Run `npx -y repoq --help` to learn available options.
+
+Use `repoq` instead of piping `git`/`gh` commands through `awk`/`jq`/`grep`.
+Each command handles edge cases (detached HEAD, unborn branches, missing auth)
+and returns validated JSON. Prefer `repoq` for reading state; use raw `git`/`gh`
+for mutations (commit, push, merge).
 
 # Rule: Discriminated Unions
 
@@ -604,18 +542,7 @@ function Button(props: ButtonProps) {
 
 ## Representing discriminated unions with Zod
 
-Use `z.discriminatedUnion()` instead of `z.union()` for discriminated unions. Regular unions check each option in order until one passes, which is slow for large unions. Discriminated unions use the discriminator key for efficient parsing.
-
-```ts
-const MyResult = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("success"), data: z.string() }),
-  z.object({ status: z.literal("failed"), error: z.string() }),
-]);
-```
-
-Each option must be an object schema whose discriminator property is a literal value—typically `z.literal()`, `z.enum()`, `z.null()`, or `z.undefined()`.
-
-For complex cases, discriminated unions can be nested. Zod determines the optimal parsing strategy using discriminators at each level:
+Use `z.discriminatedUnion()` instead of `z.union()` for discriminated unions. Regular unions check each option in order until one passes, which is slow for large unions. Discriminated unions use the discriminator key for efficient parsing. They can also be nested—Zod determines the optimal parsing strategy using discriminators at each level:
 
 ```ts
 const BaseError = { status: z.literal("failed"), message: z.string() };
@@ -630,9 +557,6 @@ const MyResult = z.discriminatedUnion("status", [
   MyErrors,
 ]);
 ```
-
-
----
 
 # Rule: Enums Alternatives
 
@@ -670,9 +594,6 @@ Object.keys(Direction).length; // 8 (not 4)
 
 String enums do not have this behavior.
 
-
----
-
 # Rule: Error Result Types
 
 Throwing errors is fine when framework infrastructure handles them (e.g., a backend request handler returning HTTP 500). For operations where callers must handle failure explicitly, use a result type instead of `try`/`catch`:
@@ -700,9 +621,6 @@ if (result.ok) {
 
 Result types make error handling explicit at call sites and let the compiler enforce that failures are addressed.
 
-
----
-
 # Rule: ESLint Print Config
 
 Use `eslint --print-config` to check if a rule is enabled in the resolved configuration. This queries ESLint's actual computed config rather than searching config files for text strings.
@@ -716,9 +634,6 @@ pnpm exec eslint --print-config src/index.ts | jq -e '.rules["@typescript-eslint
 ```
 
 Returns `2` (error), `1` (warn), or `0` (off). The `-e` flag makes jq exit with code 1 when the result is null, useful for scripting.
-
-
----
 
 # Rule: Import Type
 
@@ -734,9 +649,6 @@ import type { User } from "./user";
 
 Inline type qualifiers can leave empty `import {}` statements in the emitted JavaScript, causing unnecessary side-effect imports. Top-level `import type` guarantees complete erasure.
 
-
----
-
 # Rule: JSDoc Comments
 
 Add JSDoc comments only when a function's behavior is not self-evident from its name and signature. Keep comments concise—describe intent or non-obvious behavior, not implementation details.
@@ -744,19 +656,13 @@ Add JSDoc comments only when a function's behavior is not self-evident from its 
 Use `{@link SymbolName}` to create clickable references to other functions, types, or classes. This works across files and updates automatically when symbols are renamed.
 
 ```ts
-/**
- * Subtracts two numbers
- */
-const subtract = (a: number, b: number) => a - b;
+/** Rounds toward zero, unlike `Math.round` which rounds half-up. */
+const truncateToInt = (n: number): number => Math.trunc(n);
 
-/**
- * Does the opposite of {@link subtract}
- */
-const add = (a: number, b: number) => a + b;
+/** Inverse of {@link encodePathSegment}—decodes a single URI path segment. */
+const decodePathSegment = (segment: string): string =>
+  decodeURIComponent(segment);
 ```
-
-
----
 
 # Rule: Module Exports
 
@@ -769,9 +675,6 @@ import calc from "#components";
 // Prefer
 import { calculateTotal } from "#utils/calculate-total";
 ```
-
-
----
 
 # Rule: No Unchecked Indexed Access
 
@@ -789,9 +692,6 @@ const value = obj.key; // string | undefined
 const first = arr[0]; // string
 const value = obj.key; // string
 ```
-
-
----
 
 # Rule: Optional Properties
 
@@ -822,9 +722,6 @@ function Button({ variant = 'solid', size = 'md' }: ButtonProps) {
 
 This is safe because the default parameter guarantees a value inside the component, and omitting the prop at the call site (`<Button />`) is intentional. Avoid this pattern for props without sensible defaults or where omission would cause bugs.
 
-
----
-
 # Rule: Package Manager Execution
 
 How different package manager commands resolve binaries:
@@ -837,9 +734,6 @@ How different package manager commands resolve binaries:
 | `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
 
 `pnpx` is an alias for `pnpm dlx`.
-
-
----
 
 # Rule: Return Types
 
@@ -855,9 +749,6 @@ const myFunc = (): string => {
 
 - React components returning JSX need no annotation—the return type is always `JSX.Element` or similar.
 - React hooks returning objects should still annotate: `(): { state: string; }`.
-
-
----
 
 # Rule: TypeScript Config File Patterns
 
@@ -878,9 +769,6 @@ TypeScript globs are intentionally limited and differ from bash/zsh globs: `*`, 
 ## Resolution Priority
 
 `files` > `include` > `exclude`. If a file matches both `include` and `exclude`, it is excluded. Exception: imported files bypass `exclude`.
-
-
----
 
 # Rule: Zod Schema Naming
 
