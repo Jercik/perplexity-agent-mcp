@@ -39,7 +39,9 @@ export async function performChatCompletion(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Network error while calling Perplexity API: ${message}`);
+    throw new Error(`Network error while calling Perplexity API: ${message}`, {
+      cause: error,
+    });
   }
 
   if (!response.ok) {
@@ -62,6 +64,7 @@ export async function performChatCompletion(
       jsonError instanceof Error ? jsonError.message : String(jsonError);
     throw new Error(
       `Failed to parse JSON response from Perplexity API: ${message}`,
+      { cause: jsonError },
     );
   }
 

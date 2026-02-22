@@ -4,7 +4,7 @@ import { axkit } from "eslint-config-axkit";
 const gitignorePath = path.join(import.meta.dirname, ".gitignore");
 
 export default [
-  ...axkit({ gitignorePath }),
+  ...(await axkit({ gitignorePath })),
   {
     rules: {
       "@typescript-eslint/no-unused-vars": [

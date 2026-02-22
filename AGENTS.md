@@ -676,6 +676,20 @@ import calc from "#components";
 import { calculateTotal } from "#utils/calculate-total";
 ```
 
+# Rule: No Tests for Type Guarantees
+
+Don't write tests for what the type system already guarantees. If TypeScript enforces a constraint at compile time, a runtime test for that same constraint adds maintenance cost without catching new bugs.
+
+```ts
+// BAD: return type is literally { status: "inactive" }, this can never fail
+it("should return inactive status", () => {
+  const result = deactivate({ status: "active" });
+  expect(result.status).toBe("inactive");
+});
+```
+
+If removing a test and introducing a bug would cause a compile error, the test is redundant. If the bug would compile cleanly and only surface at runtime, the test has value.
+
 # Rule: No Unchecked Indexed Access
 
 When `noUncheckedIndexedAccess` is enabled in `tsconfig.json`, indexing into arrays and objects returns `T | undefined` rather than `T`. Handle the potential `undefined` value instead of assuming the index exists.
