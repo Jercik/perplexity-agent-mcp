@@ -2,23 +2,11 @@
   "name": "perplexity-agent-mcp",
   "version": "1.3.0",
   "description": "An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI.",
-  "keywords": [
-    "ai",
-    "perplexity",
-    "mcp",
-    "modelcontextprotocol"
-  ],
-  "license": "MIT",
   "author": "Łukasz Jerciński",
-  "packageManager": "pnpm@10.30.3",
-  "type": "module",
-  "main": "dist/index.js",
-  "bin": {
-    "perplexity-agent-mcp": "dist/index.js"
-  },
+  "license": "MIT",
   "scripts": {
+    "prepack": "pnpm build",
     "prepare": "git config core.hooksPath .githooks",
-    "prepublishOnly": "pnpm build",
     "build": "tsc --build tsconfig.app.json --force",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -29,37 +17,6 @@
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
     "typecheck": "tsc -b --noEmit"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "zod": "^3.25.76"
-  },
-  "devDependencies": {
-    "@total-typescript/ts-reset": "^0.6.1",
-    "@types/node": "^25.3.5",
-    "eslint": "^10.0.3",
-    "eslint-config-axkit": "^1.4.0",
-    "fta-check": "^1.5.1",
-    "fta-cli": "^3.0.0",
-    "knip": "^5.86.0",
-    "prettier": "3.8.1",
-    "semantic-release": "^25.0.3",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
-  },
-  "engines": {
-    "node": ">=22.14.0"
-  },
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist",
-    "LICENSE",
-    "README.md"
-  ],
-  "release": {
-    "branches": [
-      "main"
-    ]
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Jercik/perplexity-agent-mcp.git"
@@ -67,5 +24,48 @@
   "homepage": "https://github.com/Jercik/perplexity-agent-mcp#readme",
   "bugs": {
     "url": "https://github.com/Jercik/perplexity-agent-mcp/issues"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "perplexity-agent-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "ai",
+    "perplexity",
+    "mcp",
+    "modelcontextprotocol"
+  ],
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@total-typescript/ts-reset": "^0.6.1",
+    "@types/node": "^25.6.0",
+    "eslint": "^10.2.0",
+    "eslint-config-axkit": "^1.6.3",
+    "fta-check": "^1.5.1",
+    "fta-cli": "^3.0.0",
+    "knip": "^6.3.1",
+    "prettier": "3.8.2",
+    "semantic-release": "^25.0.3",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "release": {
+    "branches": [
+      "main"
+    ]
   }
 }

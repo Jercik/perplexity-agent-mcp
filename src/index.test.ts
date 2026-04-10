@@ -2,7 +2,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 class ExitError extends Error {
-  constructor(readonly code: number | undefined) {
+  constructor(code: number | undefined) {
     super(`process.exit(${code ?? 0})`);
     this.name = "ExitError";
   }

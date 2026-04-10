@@ -634,6 +634,8 @@ Inline type qualifiers can leave empty `import {}` statements in the emitted Jav
 
 Don't use default exports. Don't use barrel files (`index.ts` that re-exports siblings). Both add indirection that breaks the link between an import and its source—default exports let importers pick arbitrary names, barrels route imports through an intermediary. This harms refactoring, IDE navigation, and build performance.
 
+**Exception:** A single `index.ts` entry point for an npm library's public API is acceptable—this is the package boundary, not an internal convenience barrel.
+
 ```ts
 // Avoid
 import calc from "#components";

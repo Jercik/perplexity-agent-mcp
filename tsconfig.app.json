@@ -9,10 +9,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+
+    "types": ["node"],
+
     /* Not running in the DOM */
     "lib": ["es2022"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "types/**/*.d.ts"],
   "exclude": [
     "**/*.test.ts",
     "**/*.spec.ts",
