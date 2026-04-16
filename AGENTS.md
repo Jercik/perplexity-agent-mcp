@@ -1,28 +1,23 @@
 # Rule: Mandatory Startup Reads
 
-Before taking any action—answering questions, editing files, or running commands—read these files in order:
-
-- **@README.md** — Project overview and context
-
-If a file does not exist, skip it silently and continue.
+Before taking any action, read @README.md for project overview and context. If it does not exist, skip silently and continue.
 
 # Rule: `askpplx` CLI Usage
 
-**At session start:** Run `npx -y askpplx --help` to confirm the tool works and learn available options.
+Run `npx -y askpplx --help` at session start to confirm the tool works and learn available options.
 
-Use `askpplx` to query Perplexity for real-time web search. Use it to verify external facts before acting—documentation, API behavior, library versions, best practices. A lookup is far cheaper than debugging hallucinated code or explaining why an approach failed. Verification is fast and cheap—prefer looking up information over making assumptions. When in doubt, verify.
+Use `askpplx` for real-time web search via Perplexity. Verify external facts—documentation, API behavior, library versions, best practices—before acting on them. A lookup costs far less than debugging hallucinated code.
 
 # Rule: Avoid Leaky Abstractions
 
-Design abstractions around consumer needs, not implementation details. A leaky abstraction forces callers to understand the underlying system to use it correctly—defeating its purpose. While all non-trivial abstractions leak somewhat (Joel Spolsky's Law of Leaky Abstractions), minimize leakage by ensuring your interface doesn't expose internal constraints, infrastructure artifacts, or inconsistent behavior.
+Design interfaces around what callers need, not how the system works internally. An abstraction is leaky when using it correctly requires knowledge of underlying storage, infrastructure, or error behavior. Keep signatures consistent, return domain types instead of backend artifacts, and inject infrastructure dependencies through constructors rather than method parameters.
 
 ## Warning signs
 
-- **Inconsistent signatures**: Some methods require parameters others don't, revealing backend differences
-- **Infrastructure artifacts**: Connection strings, database IDs, or ORM-specific constructs in the API
-- **Performance surprises**: Logically equivalent operations with vastly different performance
-- **Implementation-dependent error handling**: Callers must catch specific exceptions from underlying layers
-- **Required internal knowledge**: Using the abstraction safely requires understanding what's beneath it
+- Inconsistent method signatures that reflect backend differences
+- Infrastructure details (connection strings, transaction handles) exposed in the interface
+- Large performance differences between similar operations
+- Errors that force callers to understand underlying layers
 
 ## Example
 
@@ -30,48 +25,48 @@ Design abstractions around consumer needs, not implementation details. A leaky a
 // Leaky: exposes database concerns, inconsistent signatures
 interface ReservationRepository {
   create(restaurantId: number, reservation: Reservation): number; // returns DB ID
-  findById(id: string): Reservation | null; // why no restaurantId here?
+  findById(id: string): Reservation | null; // why no restaurantId?
   update(reservation: Reservation): void;
   connect(connectionString: string): void;
-  disconnect(): void;
 }
 
-// Better: consistent interface, infrastructure hidden
+// Better: consistent interface, infrastructure hidden, injected via constructor
 interface ReservationRepository {
   create(restaurantId: number, reservation: Reservation): Promise<void>;
   findById(restaurantId: number, id: string): Promise<Reservation | null>;
   update(restaurantId: number, reservation: Reservation): Promise<void>;
 }
-
-// Connection management injected, not exposed
-class PostgresReservationRepository implements ReservationRepository {
-  constructor(private readonly pool: Pool) {}
-  // ...
-}
 ```
 
-## Practical guidance
+# Rule: Comments Explain Why, Not What
 
-- Design interfaces for what callers need to do, not how you implement it
-- Keep signatures consistent—if one method needs context, similar methods should too
-- Return domain types, not infrastructure artifacts (avoid raw database IDs)
-- Inject infrastructure dependencies through constructors, not method parameters
-- Normalize error handling so callers don't catch implementation-specific exceptions
+Default to writing no comments. Only add one when the WHY is non-obvious — a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would surprise a reader. If removing the comment wouldn't confuse a future reader, don't write it.
+
+When a comment is warranted, capture intent, constraints, and reasoning the code cannot show: why a decision was made, which alternatives were rejected, what external factor forced a workaround. That's what future readers cannot recover from the code alone, and it stops the next person from "cleaning up" something load-bearing.
+
+Never explain WHAT the code does. Names convey purpose, types convey shape, the code itself conveys behavior. Never reference the current task, fix, or callers ("used by X", "added for the Y flow", "handles the case from issue #123") — those belong in the PR description and rot as the codebase evolves. Don't add comments, docstrings, or type annotations to code you didn't change.
+
+Keep comments to one short line. Never write multi-paragraph docstrings or multi-line comment blocks.
+
+```ts
+// BAD: restates what the code says
+// Increment counter by 1
+counter += 1;
+
+// BAD: references caller context that will rot
+// Used by the checkout flow after the Stripe webhook fires
+function markOrderPaid(orderId: string) {
+  /* ... */
+}
+
+// GOOD: records a non-obvious external constraint
+// Stripe rejects descriptions over 500 chars; truncate defensively
+const description = raw.slice(0, 500);
+```
 
 # Rule: Early Returns
 
-Handle edge cases and invalid states at the top of a function with guard clauses that return early. This flattens nested conditionals and keeps the happy path obvious.
-
-```ts
-function getDiscount(user: User | null) {
-  if (!user) return 0;
-  if (!user.isActive) return 0;
-  if (user.membership === "premium") return 0.2;
-  return 0.1;
-}
-```
-
-Invert conditions and exit immediately—null checks, permission checks, validation, empty collections. Main logic stays at the top level with minimal indentation.
+Handle edge cases and invalid states at the top of a function with guard clauses that return early. Invert conditions and exit immediately—null checks, permission checks, validation, empty collections. Main logic stays at the top level with minimal indentation.
 
 # Rule: File Naming Matches Contents
 
@@ -154,7 +149,18 @@ return formatRemovalResult(removedFrom);
 
 ## When to extract
 
-Extract when a name clarifies complex intent, you need consistent behavior across many call sites, the function encapsulates a coherent standalone concept, or testing it in isolation provides value. Don't extract for single callers, because "we might need this elsewhere," or when the name describes implementation rather than purpose.
+Extract when duplication causes real maintenance risk, not merely because code appears twice:
+
+- A name clarifies complex intent
+- Multiple call sites must stay in lockstep and silent divergence would be a bug
+- The function encapsulates a coherent standalone concept
+- Testing it in isolation provides value
+
+Don't extract for hypothetical reuse:
+
+- For a single caller
+- Because "we might need this elsewhere"
+- When the name describes implementation rather than purpose
 
 ## The wrong abstraction
 
@@ -178,33 +184,18 @@ Unlike production code that handles varied inputs, tests verify specific cases. 
 
 Test utilities are acceptable for setup and data preparation—fixtures, builders, factories, mock configuration—but not for computing expected values. Keep assertion logic in the test body with literal expectations.
 
-# Rule: Normalize User Input
+# Rule: Package Manager Execution
 
-Accept flexible input formats and normalize programmatically. Don't reject input because of formatting characters users naturally include—spaces in credit card numbers, parentheses in phone numbers, hyphens in IDs. Computers are good at removing that.
+How different package manager commands resolve binaries:
 
-```ts
-import * as z from "zod";
+| Command           | Behavior                                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| `pnpm exec foo`   | Runs from `./node_modules/.bin`; falls back to system PATH              |
+| `pnpx foo`        | Always fetches from registry (uses dlx cache); ignores local installs   |
+| `npx foo`         | Checks local `node_modules/.bin` → global → downloads from registry     |
+| `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
 
-// BAD - forces users to format input a specific way
-const phoneSchema = z.string().regex(/^\d{10}$/, "Only digits allowed");
-
-// GOOD - accept flexible input, normalize it
-const phoneSchema = z
-  .string()
-  .transform((s) => s.replace(/[\s().-]/g, ""))
-  .pipe(z.string().regex(/^\d{10}$/, "Must be 10 digits"));
-```
-
-When accepting user input:
-
-- **Strip formatting characters** (spaces, hyphens, parentheses, dots) before validation
-- **Trim whitespace** from text fields
-- **Normalize case** when case doesn't matter (emails, usernames)
-- **Accept common variations** (with/without country code for phones, with/without protocol for URLs)
-
-**Never normalize passwords.** Users should be able to use any characters exactly as entered—normalizing passwords reduces entropy and can break legitimate credentials. The only acceptable transformation is Unicode normalization (NFC/NFKC) for cross-platform compatibility before hashing.
-
-The validation error should describe what's actually wrong with the data, not complain about formatting the computer could have handled.
+`pnpx` is an alias for `pnpm dlx`.
 
 # Rule: Parse, Don't Validate
 
@@ -233,7 +224,7 @@ function handleRequest(body: unknown): User {
 ## Practical guidance
 
 - **Parse at system boundaries.** Convert external input (JSON, environment variables, API responses) to precise domain types early. Use `.parse()` or `.safeParse()`.
-- **Strengthen argument types.** Instead of returning `T | undefined`, require callers to provide already-parsed data.
+- **Strengthen argument types.** Instead of accepting `T | undefined`, require callers to provide already-parsed data.
 - **Let schemas encode constraints.** If a function needs a non-empty array, positive number, or valid email, define a schema that encodes that guarantee.
 - **Treat `void`-returning checks with suspicion.** A function that validates but returns nothing is easy to forget.
 - **Use `.refine()` for custom constraints.** When built-in validators aren't enough, add refinements that preserve type information.
@@ -249,7 +240,7 @@ type PositiveInt = z.infer<typeof PositiveInt>;
 
 # Rule: Child Process Selection
 
-Choose the appropriate `node:child_process` function based on synchronicity, shell requirements, output size, and error handling. (Defaults from Node.js 25.x docs.)
+Choose the appropriate `node:child_process` function based on synchronicity, shell requirements, output size, and error handling.
 
 | Function       | Type  | Default shell?      | Output style                        | Best for                                                           |
 | :------------- | :---- | :------------------ | :---------------------------------- | :----------------------------------------------------------------- |
@@ -267,14 +258,6 @@ Choose the appropriate `node:child_process` function based on synchronicity, she
 - **Shell needs:** Use `exec`/`execSync` when you need shell features (pipes, globs, env expansion). Prefer `execFile`/`execFileSync` for direct binaries; set `shell: true` only when required.
 - **Security:** Never pass unsanitized user input when a shell is involved (`exec`, `execSync`, or any `{ shell: true }`). Prefer `execFile*` with an args array to avoid injection.
 - **Error handling:** `exec*` callbacks get an `error` on non-zero exit; sync `exec*` throw. `spawn` emits `'error'` only if the process fails to start; exit codes arrive via `'close'`/`'exit'`. `spawnSync` returns `{ status, signal, stdout, stderr, error }` without throwing on non-zero exit.
-
-## Shell behavior summary
-
-| Function                   | Default `shell` | Notes                                                            |
-| :------------------------- | :-------------- | :--------------------------------------------------------------- |
-| `spawn`, `spawnSync`       | `false`         | Set `shell: true` to run through a shell.                        |
-| `exec`, `execSync`         | `true`          | Always uses a shell.                                             |
-| `execFile`, `execFileSync` | `false`         | Direct execution; `shell: true` opt-in removes injection safety. |
 
 ## Examples
 
@@ -396,26 +379,15 @@ function isWithinDirectory(base: string, target: string): boolean {
 
 **Note:** On Windows, `path.relative()` performs case-insensitive comparison (e.g., `path.win32.relative('C:/Foo', 'c:/foo/bar')` returns `'bar'`). This makes it suitable for path containment checks without manual case normalization.
 
-## Key Points
+## Caveats
 
-1. **Use `relative()` not `startsWith()`** - avoids manual separator handling and different-drive detection
-2. **Check for absolute result** - indicates different drive/root on Windows
-3. **Check for `..` prefix with `sep`** - use `rel === ".." || rel.startsWith(`..${sep}`)` to detect upward traversal without blocking names like `..foo/bar.txt`
-4. **Empty string is valid** - means the paths are equal
-5. **Symlinks are not resolved** - `resolve()` and `relative()` operate lexically; use `fs.realpathSync()` if symlink traversal is a concern
-
-## When to Apply
-
-Use this pattern when:
-
-- Validating user-provided file paths
-- Preventing path traversal attacks (e.g., `../../../etc/passwd`)
-- Ensuring files stay within a designated base directory
-- Any path containment check that must work on Windows
+`resolve()` and `relative()` operate lexically and do not follow symlinks. If an attacker could plant symlinks inside the base directory, resolve symlinks first with `fs.realpath()` or `fs.realpathSync()`.
 
 # Rule: Import Metadata from package.json
 
-Import name, version, and description directly from package.json to maintain a single source of truth for your package metadata. In Node.js 20.10+ use `with { type: "json" }` syntax (the older `assert` keyword is deprecated); ensure TypeScript's `resolveJsonModule` is enabled in tsconfig.json. This approach eliminates manual version synchronization and reduces maintenance errors when updating package information. Always import from the nearest package.json using relative paths to ensure correct metadata for monorepo packages.
+Import `name`, `version`, and `description` from `package.json` rather than duplicating them in code, so metadata stays in sync.
+
+Use the `with { type: "json" }` import attribute (Node.js 20.10+; the older `assert` keyword is deprecated) and enable `resolveJsonModule` in `tsconfig.json`. Always import via a relative path to the nearest `package.json` so each package in a monorepo picks up its own metadata.
 
 ```ts
 import packageJson from "./package.json" with { type: "json" };
@@ -428,7 +400,9 @@ const program = new Command()
 
 # Rule: Package.json Imports
 
-Use `package.json` "imports" field with `#` prefixes to create stable internal module paths that replace brittle relative imports like `../../../utils`. The imports field accepts exact paths (`"#db": "./src/db.js"`) and wildcards (`"#utils/*": "./src/utils/*.js"`), and these private subpath imports are only accessible within your package, not from external consumers. Modern Node.js versions support this natively, while recent TypeScript versions provide full editor support including auto-imports and IntelliSense. For TypeScript projects, map to `.js` extensions in package.json since Node.js expects JavaScript at runtime, or use `.ts` with `allowImportingTsExtensions: true` for native TypeScript execution tools like tsx, Bun or latest Node.
+Use the `imports` field in `package.json` with `#` prefixes to create stable internal module paths, replacing brittle relative imports like `../../../utils`. These subpath imports are private—external consumers of the package cannot resolve them.
+
+The field accepts exact paths and wildcards:
 
 ```json
 {
@@ -438,6 +412,8 @@ Use `package.json` "imports" field with `#` prefixes to create stable internal m
   }
 }
 ```
+
+Map targets to `.js` extensions since Node.js expects JavaScript at runtime. When running through a native TypeScript runtime (tsx, Bun, or Node.js with type stripping), map to `.ts` instead and set `allowImportingTsExtensions: true` in `tsconfig.json`.
 
 # Rule: Native TypeScript Execution
 
@@ -451,40 +427,13 @@ For Node.js 22.6–22.17, use `--experimental-strip-types`. Older versions requi
 
 # Rule: Use `repoq` for Repository Queries
 
-Run `npx -y repoq --help` to learn available options.
+Run `npx -y repoq --help` at session start to confirm the tool works and learn available options.
 
-Use `repoq` instead of piping `git`/`gh` commands through `awk`/`jq`/`grep`.
-Each command handles edge cases (detached HEAD, unborn branches, missing auth)
-and returns validated JSON. Prefer `repoq` for reading state; use raw `git`/`gh`
-for mutations (commit, push, merge).
+Use `repoq` for reading repository state instead of piping `git`/`gh` through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and returns validated JSON. Use raw `git`/`gh` for mutations (commit, push, merge).
 
 # Rule: Discriminated Unions
 
-Use discriminated unions to model data that can be in one of several distinct shapes. Each variant shares a literal discriminant property (commonly `type`, `kind`, or `status`) that TypeScript uses to narrow the union.
-
-```ts
-type UserCreatedEvent = {
-  type: "user.created";
-  data: { id: string; email: string };
-};
-type UserDeletedEvent = { type: "user.deleted"; data: { id: string } };
-type Event = UserCreatedEvent | UserDeletedEvent;
-
-const handleEvent = (event: Event) => {
-  switch (event.type) {
-    case "user.created":
-      console.log(event.data.email); // TypeScript knows `email` exists
-      break;
-    case "user.deleted":
-      console.log(event.data.id);
-      break;
-  }
-};
-```
-
-## Preventing the "bag of optionals" problem
-
-Discriminated unions eliminate impossible states that optional properties allow:
+Use discriminated unions to model data that can be in one of several distinct shapes. Each variant shares a literal discriminant property (commonly `type`, `kind`, or `status`) that TypeScript uses to narrow the union. Prefer discriminated unions over a "bag of optionals" — optional properties allow impossible states that the type system should prevent.
 
 ```ts
 // BAD - allows impossible states like { status: "idle", data: someData }
@@ -502,42 +451,7 @@ type FetchingState<TData> =
   | { status: "error"; error: Error };
 ```
 
-## React props with variant-specific properties
-
-Use discriminated unions for polymorphic components where different variants require different props:
-
-```ts
-type ButtonProps =
-  | { variant: "solid"; color: string }
-  | { variant: "outline"; borderWidth: number };
-
-function Button(props: ButtonProps) {
-  switch (props.variant) {
-    case "solid":
-      return <button style={{ background: props.color }} />;
-    case "outline":
-      return <button style={{ borderWidth: props.borderWidth }} />;
-  }
-}
-```
-
-## Representing discriminated unions with Zod
-
-Use `z.discriminatedUnion()` instead of `z.union()` for discriminated unions. Regular unions check each option in order until one passes, which is slow for large unions. Discriminated unions use the discriminator key for efficient parsing. They can also be nested—Zod determines the optimal parsing strategy using discriminators at each level:
-
-```ts
-const BaseError = { status: z.literal("failed"), message: z.string() };
-const MyErrors = z.discriminatedUnion("code", [
-  z.object({ ...BaseError, code: z.literal(400) }),
-  z.object({ ...BaseError, code: z.literal(401) }),
-  z.object({ ...BaseError, code: z.literal(500) }),
-]);
-
-const MyResult = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("success"), data: z.string() }),
-  MyErrors,
-]);
-```
+With Zod, use `z.discriminatedUnion()` instead of `z.union()` — it uses the discriminator key for O(1) parsing instead of trying each variant in order.
 
 # Rule: Enums Alternatives
 
@@ -556,28 +470,11 @@ type SizeKey = keyof typeof Size; // "xs" | "sm" | "md"
 type SizeValue = (typeof Size)[SizeKey]; // "EXTRA_SMALL" | "SMALL" | "MEDIUM"
 ```
 
-## Numeric Enum Pitfall
-
-Numeric enums produce a reverse mapping, doubling the number of keys:
-
-```ts
-enum Direction {
-  Up,
-  Down,
-  Left,
-  Right,
-}
-
-Direction.Up; // 0
-Direction[0]; // "Up"
-Object.keys(Direction).length; // 8 (not 4)
-```
-
-String enums do not have this behavior.
+Numeric enums are especially problematic—they produce reverse mappings that double the number of keys, so `Object.keys()` on a 4-member numeric enum returns 8 entries. String enums do not have this behavior.
 
 # Rule: Error Result Types
 
-Throwing errors is fine when framework infrastructure handles them (e.g., a backend request handler returning HTTP 500). For operations where callers must handle failure explicitly, use a result type instead of `try`/`catch`:
+Throw errors when framework infrastructure handles them (e.g., a backend request handler converting the throw into an HTTP 500). For operations where callers must handle failure explicitly, return a result type instead of using `try`/`catch` at the call site:
 
 ```ts
 type Result<T, E extends Error> =
@@ -601,20 +498,6 @@ if (result.ok) {
 ```
 
 Result types make error handling explicit at call sites and let the compiler enforce that failures are addressed.
-
-# Rule: ESLint Print Config
-
-Use `eslint --print-config` to check if a rule is enabled in the resolved configuration. This queries ESLint's actual computed config rather than searching config files for text strings.
-
-```bash
-# Check a simple rule
-pnpm exec eslint --print-config src/index.ts | jq -e '.rules["no-console"][0]'
-
-# Check a namespaced rule
-pnpm exec eslint --print-config src/index.ts | jq -e '.rules["@typescript-eslint/no-unnecessary-type-parameters"][0]'
-```
-
-Returns `2` (error), `1` (warn), or `0` (off). The `-e` flag makes jq exit with code 1 when the result is null, useful for scripting.
 
 # Rule: Import Type
 
@@ -666,13 +549,20 @@ When `noUncheckedIndexedAccess` is enabled in `tsconfig.json`, indexing into arr
 const arr: string[] = ["a", "b"];
 const obj: Record<string, string> = { foo: "bar" };
 
-// With noUncheckedIndexedAccess enabled:
-const first = arr[0]; // string | undefined
-const value = obj.key; // string | undefined
+// Both reads are typed `string | undefined`:
+const first = arr[0];
+const value = obj.key;
 
-// Without it:
-const first = arr[0]; // string
-const value = obj.key; // string
+// BAD: assumes the index exists
+first.toUpperCase(); // Error: 'first' is possibly 'undefined'
+
+// GOOD: narrow before use
+if (first !== undefined) {
+  first.toUpperCase();
+}
+
+// GOOD: optional chaining
+arr[0]?.toUpperCase();
 ```
 
 # Rule: Optional Properties
@@ -687,39 +577,11 @@ type AuthOptions = { userId?: string };
 type AuthOptions = { userId: string | undefined };
 ```
 
-## Exception: React Props with Defaults
-
-Optional properties are acceptable in React props when combined with default parameters:
-
-```ts
-type ButtonProps = {
-  variant?: 'solid' | 'outline';
-  size?: 'sm' | 'md' | 'lg';
-};
-
-function Button({ variant = 'solid', size = 'md' }: ButtonProps) {
-  return <button className={`${variant} ${size}`} />;
-}
-```
-
-This is safe because the default parameter guarantees a value inside the component, and omitting the prop at the call site (`<Button />`) is intentional. Avoid this pattern for props without sensible defaults or where omission would cause bugs.
-
-# Rule: Package Manager Execution
-
-How different package manager commands resolve binaries:
-
-| Command           | Behavior                                                                |
-| ----------------- | ----------------------------------------------------------------------- |
-| `pnpm exec foo`   | Runs from `./node_modules/.bin`; falls back to system PATH              |
-| `pnpx foo`        | Always fetches from registry (uses dlx cache); ignores local installs   |
-| `npx foo`         | Checks local `node_modules/.bin` → global → downloads from registry     |
-| `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
-
-`pnpx` is an alias for `pnpm dlx`.
+**Exception:** Optional properties are acceptable in React props when combined with default parameters (e.g., `{ variant = 'solid' }: ButtonProps`), since the default guarantees a value and omission at the call site is intentional.
 
 # Rule: Return Types
 
-Annotate return types on top-level module functions. Explicit return types document intent, catch incomplete implementations at the definition site, and help AI assistants understand function purpose.
+Annotate return types on top-level module functions. Explicit return types document intent and catch incomplete implementations at the definition site.
 
 ```ts
 const myFunc = (): string => {
