@@ -18,10 +18,14 @@ export function stripThinkContent(input: string): string {
   const close = "</think>";
 
   const firstOpen = input.indexOf(open);
-  if (firstOpen === -1) return input;
+  if (firstOpen === -1) {
+    return input;
+  }
 
   const lastClose = input.lastIndexOf(close);
-  if (lastClose === -1 || lastClose < firstOpen) return input;
+  if (lastClose === -1 || lastClose < firstOpen) {
+    return input;
+  }
 
   const end = lastClose + close.length;
   return input.slice(0, firstOpen) + input.slice(end);

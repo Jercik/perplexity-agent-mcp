@@ -24,8 +24,7 @@ After`;
     });
 
     it("should remove multiple separate think blocks", () => {
-      const input =
-        "Start <think>first</think> middle <think>second</think> end";
+      const input = "Start <think>first</think> middle <think>second</think> end";
       const expected = "Start  end";
       const result = stripThinkContent(input);
       expect(result).toBe(expected);

@@ -11,7 +11,7 @@ import { stripThinkContent } from "./strip-think-content.js";
  * @throws Will throw an error if the API request fails.
  */
 export async function performChatCompletion(
-  messages: Array<{ role: string; content: string }>,
+  messages: { role: string; content: string }[],
   options: ChatOptions,
 ): Promise<string> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -60,12 +60,10 @@ export async function performChatCompletion(
   try {
     json = await response.json();
   } catch (jsonError) {
-    const message =
-      jsonError instanceof Error ? jsonError.message : String(jsonError);
-    throw new Error(
-      `Failed to parse JSON response from Perplexity API: ${message}`,
-      { cause: jsonError },
-    );
+    const message = jsonError instanceof Error ? jsonError.message : String(jsonError);
+    throw new Error(`Failed to parse JSON response from Perplexity API: ${message}`, {
+      cause: jsonError,
+    });
   }
 
   const parsedResponse = PerplexityResponse.safeParse(json);

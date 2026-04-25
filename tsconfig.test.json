@@ -1,21 +1,14 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "module": "NodeNext",
+    "lib": ["ES2025", "ESNext.Array", "ESNext.Error"],
+    "types": ["vitest/globals", "node"],
+    "jsx": "react-jsx",
     "composite": true,
-    /* Not running in the DOM */
-    "lib": ["es2022"],
-    "types": ["node", "vitest/globals"],
-
-    /* Type checking only */
-    "noEmit": true,
-    "allowImportingTsExtensions": true
+    "noEmit": true
   },
-  "include": [
-    "src/**/*.ts",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/*.test.tsx",
-    "**/*.spec.tsx"
-  ],
+  "files": ["package.json"],
+  "include": ["**/*.test.*", "**/*.spec.*", "types/**/*.d.ts", "src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }

@@ -27,9 +27,7 @@ afterEach(() => {
 describe("CLI entry point", () => {
   it("prints the package version when --version is provided", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
-      code?: number,
-    ) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new ExitError(code);
     }) as never);
 
@@ -43,9 +41,7 @@ describe("CLI entry point", () => {
 
   it("prints the package version when -v is provided", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
-      code?: number,
-    ) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new ExitError(code);
     }) as never);
 
@@ -59,9 +55,7 @@ describe("CLI entry point", () => {
 
   it("requires PERPLEXITY_API_KEY when no version flag is provided", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((
-      code?: number,
-    ) => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
       throw new ExitError(code);
     }) as never);
 

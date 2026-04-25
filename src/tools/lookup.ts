@@ -23,14 +23,11 @@ One question per call—split combined requests into separate queries.
       },
     },
     async ({ query }) => {
-      const result = await performChatCompletion(
-        [{ role: "user", content: query }],
-        {
-          model: "sonar-pro",
-          system: LOOKUP_SYSTEM_PROMPT,
-          searchContextSize: "medium",
-        },
-      );
+      const result = await performChatCompletion([{ role: "user", content: query }], {
+        model: "sonar-pro",
+        system: LOOKUP_SYSTEM_PROMPT,
+        searchContextSize: "medium",
+      });
       return { content: [{ type: "text", text: result }] };
     },
   );

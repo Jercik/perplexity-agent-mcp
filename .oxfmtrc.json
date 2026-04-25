@@ -1,0 +1,4 @@
+{
+  "$schema": "https://unpkg.com/oxfmt@0.46.0/configuration_schema.json",
+  "ignorePatterns": ["pnpm-lock.yaml", "**/*.hbs", ".agents/", ".claude/", "AGENTS.md", "CLAUDE.md"]
+}

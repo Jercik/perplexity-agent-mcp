@@ -1,6 +1,0 @@
-# Lock file - tracked in git but shouldn't be formatted
-pnpm-lock.yaml
-.agents/
-.claude/
-AGENTS.md
-CLAUDE.md

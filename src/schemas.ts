@@ -36,8 +36,8 @@ export const PerplexityResponse = z.object({
 /**
  * Chat options for Perplexity API requests
  */
-export type ChatOptions = {
+export interface ChatOptions {
   model: string;
   system: string;
   searchContextSize: "low" | "medium" | "high";
-};
+}

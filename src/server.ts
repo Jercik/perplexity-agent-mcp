@@ -27,7 +27,5 @@ export async function runServer(): Promise<void> {
   const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(
-    "Perplexity MCP Server running on stdio with Lookup and Answer tools",
-  );
+  console.error("Perplexity MCP Server running on stdio with Lookup and Answer tools");
 }

@@ -1,27 +1,18 @@
 {
-  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
+    "module": "NodeNext",
+    "lib": ["ES2025", "ESNext.Array", "ESNext.Error"],
+    "types": ["node"],
+    "jsx": "react-jsx",
     "outDir": "./dist",
     "rootDir": "./src",
-    "noEmit": false,
+    "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "rewriteRelativeImportExtensions": true,
-    "types": ["node"],
-
-    /* Not running in the DOM */
-    "lib": ["es2022"]
+    "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/**/*.ts", "types/**/*.d.ts"],
-  "exclude": [
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/*.test.tsx",
-    "**/*.spec.tsx",
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "types/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.*", "**/*.spec.*"]
 }

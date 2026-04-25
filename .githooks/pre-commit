@@ -4,19 +4,22 @@ set -euo pipefail
 
 git diff --cached --check
 
-if [[ ! -f package.json ]]; then
-  exit 0
-fi
-
-if command -v npm >/dev/null 2>&1; then
-  npm pkg fix || true
-  git add package.json 2>/dev/null || true
-fi
-
 has_staged_changes() {
   git diff --cached --quiet -- "$@" || return 0
   return 1
 }
+
+if [[ ! -f package.json ]]; then
+  exit 0
+fi
+
+# `npm pkg fix` normalizes package.json (e.g., sorts keys, trims invalid
+# fields). Only run it when package.json is already staged, so the hook never
+# pulls unrelated working-tree edits into a commit.
+if has_staged_changes package.json && command -v npm >/dev/null 2>&1; then
+  npm pkg fix || true
+  git add package.json 2>/dev/null || true
+fi
 
 run_script() {
   local script_name="$1"
@@ -39,13 +42,13 @@ EOF
   fi
 }
 
-# Format staged files with prettier (filter out symlinks - prettier refuses to format them)
+# Oxfmt skips unsupported files; avoid failing commits when only skipped files are staged
 if command -v pnpm >/dev/null 2>&1; then
-  PRETTIER_CMD=(pnpm exec prettier)
+  OXFMT_CMD=(pnpm exec oxfmt)
 elif command -v npm >/dev/null 2>&1; then
-  PRETTIER_CMD=(npx prettier)
+  OXFMT_CMD=(npx oxfmt)
 else
-  echo "No package manager available to run prettier" >&2
+  echo "No package manager available to run oxfmt" >&2
   exit 1
 fi
 
@@ -56,10 +59,17 @@ if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
   fi
 fi
 
-git diff --cached --name-only --diff-filter=ACMR -z \
-  | xargs -0 bash -c 'for f; do [[ -L "$f" ]] || printf "%s\0" "$f"; done' _ \
-  | xargs -0 -r "${PRETTIER_CMD[@]}" --write --ignore-unknown --log-level warn --
-git update-index --again
+staged_files=()
+while IFS= read -r -d '' file; do
+  if [[ ! -L "$file" ]]; then
+    staged_files+=("$file")
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [[ "${#staged_files[@]}" -gt 0 ]]; then
+  "${OXFMT_CMD[@]}" --write --no-error-on-unmatched-pattern -- "${staged_files[@]}"
+  git add -- "${staged_files[@]}"
+fi
 
 run_script "knip"
 run_script "typecheck"
