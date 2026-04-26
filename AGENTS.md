@@ -4,9 +4,7 @@ Before taking any action, read @README.md for project overview and context. If i
 
 # Rule: `askpplx` CLI Usage
 
-Run `npx -y askpplx --help` at session start to confirm the tool works and learn available options.
-
-Use `askpplx` for real-time web search via Perplexity. Verify external facts—documentation, API behavior, library versions, best practices—before acting on them. A lookup costs far less than debugging hallucinated code.
+Use `askpplx` for real-time web search via Perplexity. Verify external facts—documentation, API behavior, library versions, best practices—before acting on them. A lookup costs far less than debugging hallucinated code. Run `npx -y askpplx --help` if unsure of the available options.
 
 # Rule: Avoid Leaky Abstractions
 
@@ -32,7 +30,7 @@ interface ReservationRepository {
 
 // Better: consistent interface, infrastructure hidden, injected via constructor
 interface ReservationRepository {
-  create(restaurantId: number, reservation: Reservation): Promise<void>;
+  create(restaurantId: number, draft: NewReservation): Promise<Reservation>;
   findById(restaurantId: number, id: string): Promise<Reservation | null>;
   update(restaurantId: number, reservation: Reservation): Promise<void>;
 }
@@ -124,11 +122,7 @@ email.bulkSend(
 );
 ```
 
-## Testing strategy
-
-Focus testing on the functional core. These tests are fast, deterministic, need no mocks, and provide high value per line of test code. Do not write tests for the imperative shell unless the user explicitly requests them—when the core is well-tested, the shell becomes thin orchestration where bugs are easy to spot through review.
-
-If shell tests are explicitly requested, prefer integration tests over unit tests with mocks.
+Test the functional core, not the shell. Core tests are fast, deterministic, and need no mocks; the shell becomes thin orchestration where bugs are easy to spot through review. If shell tests are explicitly requested, prefer integration tests over unit tests with mocks.
 
 # Rule: Inline Obvious Code
 
@@ -182,7 +176,7 @@ expect(getPhotosUrl()).toBe("http://example.com/photos"); // fails, reveals the 
 
 Unlike production code that handles varied inputs, tests verify specific cases. State expectations directly rather than computing them. When a test fails, the expected value should be immediately readable without mental evaluation.
 
-Test utilities are acceptable for setup and data preparation—fixtures, builders, factories, mock configuration—but not for computing expected values. Keep assertion logic in the test body with literal expectations.
+Use test utilities for setup and data preparation—fixtures, builders, factories, mock configuration—but never for computing expected values. Keep assertion logic in the test body with literal expectations.
 
 # Rule: Package Manager Execution
 
@@ -259,57 +253,26 @@ Choose the appropriate `node:child_process` function based on synchronicity, she
 - **Security:** Never pass unsanitized user input when a shell is involved (`exec`, `execSync`, or any `{ shell: true }`). Prefer `execFile*` with an args array to avoid injection.
 - **Error handling:** `exec*` callbacks get an `error` on non-zero exit; sync `exec*` throw. `spawn` emits `'error'` only if the process fails to start; exit codes arrive via `'close'`/`'exit'`. `spawnSync` returns `{ status, signal, stdout, stderr, error }` without throwing on non-zero exit.
 
-## Examples
+## Shell injection: `exec` vs `execFile`
+
+Passing user input into a shell-mediated call (`exec`, `execSync`, or any `{ shell: true }`) lets metacharacters execute. Prefer `execFile*` with an args array, which passes arguments literally.
 
 ```ts
-import { spawn, exec, execFile, spawnSync, execSync } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 
-// Stream large or long-running output (no buffer cap)
-const child = spawn("find", ["/", "-name", "*.log"]);
-child.stdout.pipe(process.stdout);
-child.stderr.pipe(process.stderr);
-
-// Shell features (pipes/globs); avoid unsanitized input
-exec("ls *.js | head -5", (error, stdout, stderr) => {
-  if (error) return console.error(error);
-  console.log(stdout);
-  console.error(stderr);
-});
-
-// Safe direct execution with args array (no shell by default)
-execFile("node", ["--version"], (error, stdout) => {
-  if (error) return console.error(error);
-  console.log(stdout);
-});
-
-// Shell injection protection: compare exec vs execFile
 const userInput = "hello; echo pwned";
 
-// UNSAFE: exec runs through a shell, so metacharacters execute
+// UNSAFE: shell interprets `;`, so `echo pwned` runs
 exec(`grep ${userInput} data.txt`, (error, stdout) => {
   if (error) return console.error(error);
   console.log(stdout);
 });
 
-// Safe: execFile passes args literally, so metacharacters are not executed
+// Safe: args are passed literally, so `;` is just a search character
 execFile("grep", [userInput, "data.txt"], (error, stdout) => {
   if (error) return console.error(error);
   console.log(stdout);
 });
-
-// Blocking shell command (use sparingly in scripts)
-try {
-  const summary = execSync("git status --short").toString();
-  console.log(summary);
-} catch (error) {
-  console.error(error);
-}
-
-// Blocking with programmatic exit-code handling (no throw on non-zero)
-const result = spawnSync("ls", ["-la"]);
-if (result.error) console.error(result.error);
-if (result.status !== 0) console.error(`Exit code: ${result.status}`);
-console.log(result.stdout.toString());
 ```
 
 # Rule: Cross-Platform Path Validation
@@ -427,9 +390,7 @@ For Node.js 22.6–22.17, use `--experimental-strip-types`. Older versions requi
 
 # Rule: Use `repoq` for Repository Queries
 
-Run `npx -y repoq --help` at session start to confirm the tool works and learn available options.
-
-Use `repoq` for reading repository state instead of piping `git`/`gh` through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and returns validated JSON. Use raw `git`/`gh` for mutations (commit, push, merge).
+Use `repoq` for reading repository state instead of piping `git`/`gh` through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and returns validated JSON. Use raw `git`/`gh` for mutations (commit, push, merge). Run `npx -y repoq --help` if unsure of the available subcommands.
 
 # Rule: Discriminated Unions
 
@@ -513,9 +474,38 @@ import type { User } from "./user";
 
 Inline type qualifiers can leave empty `import {}` statements in the emitted JavaScript, causing unnecessary side-effect imports. Top-level `import type` guarantees complete erasure.
 
+# Rule: Local pnpm Package Development
+
+When developing a TypeScript package and testing it in a consuming project before release, install it as a `file:` dependency rather than via `pnpm link`.
+
+`file:` makes pnpm copy the package into the consumer's virtual store, which catches missing build output, broken `exports`, unresolved internal aliases (`#/...`), and missing CSS or assets that a live symlink would hide. `file:` dependencies are not live links — every package change requires rebuild + reinstall.
+
+## Workflow
+
+Initial wire-up:
+
+```bash
+cd <package-path> && pnpm build
+cd <consumer-path> && pnpm add @scope/package@file:<package-path>
+# Example: pnpm add @j4k/ui@file:../../j4k-ui
+```
+
+After every package source change:
+
+```bash
+cd <package-path> && pnpm build
+cd <consumer-path> && pnpm install
+```
+
+Restart the consumer dev server. If the consumer still shows old behavior, check that `dist/` changed, `pnpm install` ran in the consumer, and the dev server restarted.
+
+After release, replace the local path with the published version: `pnpm add @scope/package@^1.2.4`. Don't commit a `file:` dependency.
+
 # Rule: Module Exports
 
 Don't use default exports. Don't use barrel files (`index.ts` that re-exports siblings). Both add indirection that breaks the link between an import and its source—default exports let importers pick arbitrary names, barrels route imports through an intermediary. This harms refactoring, IDE navigation, and build performance.
+
+Don't `export` symbols from internal modules unless they're consumed outside that module or are part of the package's public API. knip treats unused exports as failures and will block the commit.
 
 **Exception:** A single `index.ts` entry point for an npm library's public API is acceptable—this is the package boundary, not an internal convenience barrel.
 
@@ -534,8 +524,14 @@ Don't write tests for what the type system already guarantees. If TypeScript enf
 ```ts
 // BAD: return type is literally { status: "inactive" }, this can never fail
 it("should return inactive status", () => {
-  const result = deactivate({ status: "active" });
+  const result = deactivate({ id: "u-123", status: "active" });
   expect(result.status).toBe("inactive");
+});
+
+// GOOD: the type says `id: string`, but not WHICH id — returning the wrong one compiles
+it("preserves the user id", () => {
+  const result = deactivate({ id: "u-123", status: "active" });
+  expect(result.id).toBe("u-123");
 });
 ```
 
@@ -577,7 +573,18 @@ type AuthOptions = { userId?: string };
 type AuthOptions = { userId: string | undefined };
 ```
 
-**Exception:** Optional properties are acceptable in React props when combined with default parameters (e.g., `{ variant = 'solid' }: ButtonProps`), since the default guarantees a value and omission at the call site is intentional.
+**Exception:** Optional properties are acceptable in React props when paired with a default parameter — the default guarantees a value, so omission at the call site is intentional rather than a forgotten field.
+
+```tsx
+type ButtonProps = { variant?: "solid" | "outline" };
+
+// Default supplies the value when callers omit `variant`
+function Button({ variant = "solid" }: ButtonProps) {
+  return <button data-variant={variant} />;
+}
+```
+
+The carve-out applies only to props with a default. Optional props without one — `userId?: string` on a hook's options — fall under the main rule.
 
 # Rule: Return Types
 
@@ -613,6 +620,29 @@ TypeScript globs are intentionally limited and differ from bash/zsh globs: `*`, 
 ## Resolution Priority
 
 `files` > `include` > `exclude`. If a file matches both `include` and `exclude`, it is excluded. Exception: imported files bypass `exclude`.
+
+# Rule: Zod `.nullish()` for Backend Fields That May Be Absent
+
+When a Zod schema validates an external API response, fields that the producer may either set to `null` or omit entirely must accept both. `.nullable()` accepts `null` but rejects `undefined`; `.optional()` accepts `undefined` but rejects `null`; `.nullish()` accepts both.
+
+```ts
+import * as z from "zod";
+
+// BAD — fails parse if the API omits `credits` from the response
+const Customer = z.object({
+  credits: z.array(Credit).nullable(),
+});
+
+// GOOD — accepts `[]`, `null`, and missing key
+const Customer = z.object({
+  credits: z
+    .array(Credit)
+    .nullish()
+    .transform((v) => v ?? []),
+});
+```
+
+Default to `.nullish()` for response fields where you don't fully control the producer. The failure mode is silent and severe: a single missing key throws a `ZodError` from `.parse()`, which often runs inside an auth callback or request handler that turns the throw into a logout, redirect, or 500 — symptoms far removed from the schema mismatch.
 
 # Rule: Zod Schema Naming
 
