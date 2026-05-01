@@ -42,33 +42,17 @@ EOF
   fi
 }
 
-# Oxfmt skips unsupported files; avoid failing commits when only skipped files are staged
-if command -v pnpm >/dev/null 2>&1; then
-  OXFMT_CMD=(pnpm exec oxfmt)
-elif command -v npm >/dev/null 2>&1; then
-  OXFMT_CMD=(npx oxfmt)
-else
-  echo "No package manager available to run oxfmt" >&2
-  exit 1
-fi
-
 if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
   if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
+    # Order matters: dedupe is the cheaper read-only check, so fail fast on
+    # lockfile bloat before the heavier lockfile-vs-package.json sync check.
     pnpm dedupe --check
-    pnpm install --frozen-lockfile --ignore-scripts
+    pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
   fi
 fi
 
-staged_files=()
-while IFS= read -r -d '' file; do
-  if [[ ! -L "$file" ]]; then
-    staged_files+=("$file")
-  fi
-done < <(git diff --cached --name-only --diff-filter=ACMR -z)
-
-if [[ "${#staged_files[@]}" -gt 0 ]]; then
-  "${OXFMT_CMD[@]}" --write --no-error-on-unmatched-pattern -- "${staged_files[@]}"
-  git add -- "${staged_files[@]}"
+if has_staged_changes; then
+  run_script "format:check"
 fi
 
 run_script "knip"

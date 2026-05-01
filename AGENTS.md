@@ -104,22 +104,15 @@ function sendUserExpiryEmail(): void {
 
 // Good: Functional core (pure, testable)
 function getExpiredUsers(users: User[], cutoff: Date): User[] {
-  return users.filter(
-    (user) => user.subscriptionEndDate <= cutoff && !user.isFreeTrial,
-  );
+  return users.filter((user) => user.subscriptionEndDate <= cutoff && !user.isFreeTrial);
 }
 
 function generateExpiryEmails(users: User[]): Array<[string, string]> {
-  return users.map((user) => [
-    user.email,
-    `Your account has expired ${user.name}.`,
-  ]);
+  return users.map((user) => [user.email, `Your account has expired ${user.name}.`]);
 }
 
 // Imperative shell (orchestrates side effects)
-email.bulkSend(
-  generateExpiryEmails(getExpiredUsers(db.getUsers(), new Date())),
-);
+email.bulkSend(generateExpiryEmails(getExpiredUsers(db.getUsers(), new Date())));
 ```
 
 Test the functional core, not the shell. Core tests are fast, deterministic, and need no mocks; the shell becomes thin orchestration where bugs are easy to spot through review. If shell tests are explicitly requested, prefer integration tests over unit tests with mocks.
@@ -177,19 +170,6 @@ expect(getPhotosUrl()).toBe("http://example.com/photos"); // fails, reveals the 
 Unlike production code that handles varied inputs, tests verify specific cases. State expectations directly rather than computing them. When a test fails, the expected value should be immediately readable without mental evaluation.
 
 Use test utilities for setup and data preparation—fixtures, builders, factories, mock configuration—but never for computing expected values. Keep assertion logic in the test body with literal expectations.
-
-# Rule: Package Manager Execution
-
-How different package manager commands resolve binaries:
-
-| Command           | Behavior                                                                |
-| ----------------- | ----------------------------------------------------------------------- |
-| `pnpm exec foo`   | Runs from `./node_modules/.bin`; falls back to system PATH              |
-| `pnpx foo`        | Always fetches from registry (uses dlx cache); ignores local installs   |
-| `npx foo`         | Checks local `node_modules/.bin` → global → downloads from registry     |
-| `npx foo@version` | Resolves version, uses local if exact match exists, otherwise downloads |
-
-`pnpx` is an alias for `pnpm dlx`.
 
 # Rule: Parse, Don't Validate
 
@@ -301,10 +281,7 @@ function isWithinDirectory(base: string, target: string): boolean {
   const resolvedBase = resolve(base);
   const resolvedTarget = resolve(target);
   // BAD: Case-sensitive comparison fails on Windows
-  return (
-    resolvedTarget.startsWith(resolvedBase + sep) ||
-    resolvedTarget === resolvedBase
-  );
+  return resolvedTarget.startsWith(resolvedBase + sep) || resolvedTarget === resolvedBase;
 }
 ```
 
@@ -438,9 +415,7 @@ Numeric enums are especially problematic—they produce reverse mappings that do
 Throw errors when framework infrastructure handles them (e.g., a backend request handler converting the throw into an HTTP 500). For operations where callers must handle failure explicitly, return a result type instead of using `try`/`catch` at the call site:
 
 ```ts
-type Result<T, E extends Error> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+type Result<T, E extends Error> = { ok: true; value: T } | { ok: false; error: E };
 
 const parseJson = (input: string): Result<unknown, Error> => {
   try {
@@ -623,7 +598,7 @@ TypeScript globs are intentionally limited and differ from bash/zsh globs: `*`, 
 
 # Rule: Zod `.nullish()` for Backend Fields That May Be Absent
 
-When a Zod schema validates an external API response, fields that the producer may either set to `null` or omit entirely must accept both. `.nullable()` accepts `null` but rejects `undefined`; `.optional()` accepts `undefined` but rejects `null`; `.nullish()` accepts both.
+Default to `.nullish()` for Zod response-schema fields whose producer you don't fully control — it's the only modifier that accepts both `null` and a missing key. `.nullable()` rejects `undefined`; `.optional()` rejects `null`; `.nullish()` accepts both.
 
 ```ts
 import * as z from "zod";
@@ -642,7 +617,7 @@ const Customer = z.object({
 });
 ```
 
-Default to `.nullish()` for response fields where you don't fully control the producer. The failure mode is silent and severe: a single missing key throws a `ZodError` from `.parse()`, which often runs inside an auth callback or request handler that turns the throw into a logout, redirect, or 500 — symptoms far removed from the schema mismatch.
+The failure mode is silent and severe: a single missing key throws a `ZodError` from `.parse()`, which often runs inside an auth callback or request handler that turns the throw into a logout, redirect, or 500 — symptoms far removed from the schema mismatch.
 
 # Rule: Zod Schema Naming
 
