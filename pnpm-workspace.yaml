@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
 enableGlobalVirtualStore: true
+registries:
+  default: https://npm.j4k.dev/

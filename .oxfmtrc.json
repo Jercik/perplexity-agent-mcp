@@ -3,5 +3,14 @@
   "sortPackageJson": {
     "sortScripts": true
   },
-  "ignorePatterns": ["pnpm-lock.yaml", "**/*.hbs", ".agents/", ".claude/", "AGENTS.md", "CLAUDE.md"]
+  "ignorePatterns": [
+    "pnpm-lock.yaml",
+    "**/*.hbs",
+    ".agents/",
+    ".claude/",
+    ".clawpatch/",
+    ".codex/",
+    "AGENTS.md",
+    "CLAUDE.md"
+  ]
 }
