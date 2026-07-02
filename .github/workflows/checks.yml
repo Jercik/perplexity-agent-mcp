@@ -15,6 +15,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Strip untrusted project install config
+        # pull_request checks out attacker-controlled code: drop committed .npmrc (redirects installs / leaks the registry token) and both pnpmfile variants .pnpmfile.cjs/.pnpmfile.mjs (pnpm 11 loads .mjs first, and their install hooks run even under --ignore-scripts).
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
 
@@ -24,8 +28,27 @@ jobs:
           node-version-file: "package.json"
           cache: "pnpm"
 
+      - name: Verify install secret
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Missing required install secret NPM_TOKEN; set it in the repo or org Actions secrets."
+            exit 1
+          fi
+
+      - name: Configure registry auth
+        run: echo "//npm.j4k.dev/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+
+      - name: Strip registry token
+        # pull_request gets secrets on same-repo PRs; remove the token before any PR-controlled script reads ~/.npmrc.
+        run: rm -f ~/.npmrc
 
       - name: Run knip
         run: pnpm knip
@@ -42,8 +65,8 @@ jobs:
       - name: Run fta
         run: pnpm fta
 
-      - name: Run tests
-        run: pnpm run test
-
       - name: Run build
         run: pnpm build
+
+      - name: Run tests
+        run: pnpm run test

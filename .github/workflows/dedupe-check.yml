@@ -19,6 +19,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Strip untrusted project install config
+        # pull_request checks out attacker-controlled code: drop committed .npmrc (redirects installs / leaks the registry token) and both pnpmfile variants .pnpmfile.cjs/.pnpmfile.mjs (pnpm 11 loads .mjs first, and their hooks run under --ignore-scripts during both install and dedupe, which keep the token on disk).
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
 
@@ -28,8 +32,24 @@ jobs:
           node-version-file: "package.json"
           cache: "pnpm"
 
+      - name: Verify install secret
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Missing required install secret NPM_TOKEN; set it in the repo or org Actions secrets."
+            exit 1
+          fi
+
+      - name: Configure registry auth
+        run: echo "//npm.j4k.dev/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 
       - name: Check for dedupe opportunities
-        run: pnpm dedupe --check
+        # No token strip here (unlike checks.yml, which strips before untrusted build/test): install ran --ignore-scripts --ignore-pnpmfile and `pnpm dedupe --check` is a builtin, so no untrusted code runs with ~/.npmrc present — stripping it would only risk breaking dedupe on private-registry repos.
+        run: pnpm dedupe --check --ignore-scripts

@@ -5,14 +5,14 @@
     "lib": ["ES2025", "ESNext.Array", "ESNext.Error"],
     "types": ["node"],
     "jsx": "react-jsx",
+    "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "types/**/*.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "types/**/*.d.ts", "src/**/*.json"],
   "exclude": ["node_modules", "dist", "**/*.test.*", "**/*.spec.*"]
 }
