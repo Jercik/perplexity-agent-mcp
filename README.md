@@ -42,7 +42,7 @@ Please update the "foo" dependency to the latest version. Use Perplexity for the
 
 ### Requirements
 
-- Node.js v22.19.0 or newer
+- Node.js v24.0.0 or newer
 - A Perplexity API key
 
 # Testing hooks
