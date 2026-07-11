@@ -56,3 +56,4 @@ Desktop.ini
 *.csv
 *.tsv
 *.jsonl
+.claude/worktrees/

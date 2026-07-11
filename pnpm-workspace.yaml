@@ -2,4 +2,8 @@ allowBuilds:
   esbuild: true
 enableGlobalVirtualStore: true
 registries:
-  default: https://npm.j4k.dev/
+  default: https://registry.npmjs.org/
+  "@j4k": https://code.j4k.dev/api/packages/j4k/npm/
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeExclude:
+  - "@j4k/*"

@@ -30,24 +30,24 @@ jobs:
 
       - name: Verify install secret
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.FORGEJO_NPM_TOKEN }}
         run: |
           set -eu
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::Missing required install secret NPM_TOKEN; set it in the repo or org Actions secrets."
+            echo "::error::Missing required install secret FORGEJO_NPM_TOKEN; set it in the repo Actions secrets."
             exit 1
           fi
 
       - name: Configure registry auth
-        run: echo "//npm.j4k.dev/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+        run: echo "//code.j4k.dev/api/packages/j4k/npm/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.FORGEJO_NPM_TOKEN }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 
       - name: Strip registry token
-        # pull_request gets secrets on same-repo PRs; remove the token before any PR-controlled script reads ~/.npmrc.
+        # pull_request runs PR-controlled scripts below; remove the token before any of them reads ~/.npmrc.
         run: rm -f ~/.npmrc
 
       - name: Run knip
