@@ -24,7 +24,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("CLI entry point", () => {
+describe("cli entry point", () => {
   it("prints the package version when --version is provided", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {

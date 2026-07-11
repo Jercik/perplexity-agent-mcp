@@ -37,7 +37,7 @@
     "knip": "knip",
     "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
     "prepack": "pnpm build",
-    "prepare": "git config core.hooksPath .githooks",
+    "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git config core.hooksPath .githooks; fi",
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
     "typecheck": "tsgo -b --noEmit"
@@ -47,16 +47,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@j4k/oxlint-config": "^2.11.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^25.6.0",
     "@typescript/native-preview": "beta",
     "fta-check": "^1.5.2",
     "fta-cli": "^3.0.0",
     "knip": "^6.6.3",
-    "oxfmt": "^0.46.0",
-    "oxlint": "^1.61.0",
-    "oxlint-config-j4k": "^2.3.0",
-    "oxlint-tsgolint": "^0.22.0",
+    "oxfmt": "^0.57.0",
+    "oxlint": "^1.72.0",
+    "oxlint-tsgolint": "^0.23.0",
     "semantic-release": "^25.0.3",
     "vitest": "^4.1.5"
   },
