@@ -63,8 +63,12 @@ jobs:
         # Lifecycle scripts must not run while the FORGEJO_NPM_TOKEN read:package PAT is in ~/.npmrc — a non-expiring PAT that reads the whole private @j4k tree; prepack still builds at publish time.
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      - name: Strip registry token
+        # The private read token is only needed for installation; semantic-release must not inherit it.
+        run: rm -f ~/.npmrc
+
       - name: Configure public npm registry (publish)
-        run: echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+        run: echo "registry=https://registry.npmjs.org/" > ~/.npmrc
 
       - name: Release
         env:
