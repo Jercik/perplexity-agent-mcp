@@ -30,7 +30,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsgo --build tsconfig.app.json --force",
+    "build": "tsc --build tsconfig.app.json --force",
     "format": "oxfmt --config .oxfmtrc.json .",
     "format:check": "oxfmt --check --config .oxfmtrc.json .",
     "fta": "fta-check",
@@ -40,7 +40,7 @@
     "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git config core.hooksPath .githooks; fi",
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
-    "typecheck": "tsgo -b --noEmit"
+    "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -50,7 +50,6 @@
     "@j4k/oxlint-config": "^2.11.0",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^25.6.0",
-    "@typescript/native-preview": "beta",
     "fta-check": "^1.5.2",
     "fta-cli": "^3.0.0",
     "knip": "^6.6.3",
@@ -58,6 +57,7 @@
     "oxlint": "^1.72.0",
     "oxlint-tsgolint": "^0.23.0",
     "semantic-release": "^25.0.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.5"
   },
   "engines": {
