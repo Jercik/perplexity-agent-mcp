@@ -6,6 +6,46 @@ Before taking any action, read @README.md for project context.
 
 Use `askpplx` for real-time web search via Perplexity. Verify external facts—documentation, API behavior, library versions, best practices—before acting on them. A lookup costs far less than debugging hallucinated code. Run `npx -y askpplx --help` if unsure of the available options.
 
+# Rule: Safe Command Execution
+
+## Store commands in arrays, not strings
+
+When Bash expands a string variable, quotes inside become literal characters and whitespace triggers word splitting:
+
+```bash
+# BAD: quotes are literal, spaces split words
+CMD="echo \"hello world\""
+$CMD  # outputs: "hello world" (with literal quotes)
+
+# GOOD: array preserves argument boundaries
+CMD=(echo "hello world")
+"${CMD[@]}"  # outputs: hello world
+```
+
+## Never interpolate variables into shell strings
+
+Variables interpolated into shell strings — `sh -c`, `bash -c`, `eval`, `ssh host` — are reparsed by the shell. Characters like `$(...)`, backticks, or `;` in the value execute as code, a classic injection vector:
+
+```bash
+# BAD: if VAR contains $(malicious), it executes
+sh -c "$VAR --write"
+
+# GOOD: direct execution, no shell interpretation
+"${CMD[@]}" --write
+
+# GOOD: with xargs, execute the array directly
+find . -name '*.js' -print0 | xargs -0 "${CMD[@]}" --write --
+```
+
+When you need shell features (pipes, redirects), use the `exec "$@"` pattern to pass arguments as positional parameters instead of interpolating them:
+
+```bash
+# GOOD: arguments passed as $@, not interpolated into the string
+xargs -0 sh -c 'exec "$@"' _ "${CMD[@]}" --write --
+```
+
+The `_` occupies `$0` (the script name), leaving `$@` for the command and arguments. Any string works as the placeholder; `_` is conventional.
+
 # Rule: Avoid Leaky Abstractions
 
 Design interfaces around what callers need, not how the system works internally. An abstraction is leaky when using it correctly requires knowledge of underlying storage, infrastructure, or error behavior. Keep signatures consistent, return domain types instead of backend artifacts, and inject infrastructure dependencies through constructors rather than method parameters.
@@ -331,7 +371,7 @@ For Node.js 22.6–22.17, use `--experimental-strip-types`. Older versions requi
 
 # Rule: Use `repoq` for Repository Queries
 
-Use `repoq` for reading repository state instead of piping `git` or the forge CLI through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and returns validated JSON. Use raw `git` for commit/push/merge, and the repo's forge CLI for forge-side mutations (PRs, issues, releases) — `gh` for GitHub or `fgj` for Forgejo, per the detected provider. Run `npx -y repoq --help` if unsure of the available subcommands.
+Use `repoq` for reading repository state instead of piping `git` or the forge CLI through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and returns validated JSON. Use raw `git` for commit/push/merge, and the repo's forge CLI for forge-side mutations (PRs, issues, releases) — `gh` for GitHub or `fgj` for Forgejo, per the detected provider. Run `npx -y repoq@latest --help` if unsure of the available subcommands; the explicit tag prevents `npx` from reusing a stale cached release.
 
 # Rule: Discriminated Unions
 
