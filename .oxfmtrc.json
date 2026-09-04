@@ -10,6 +10,8 @@
     ".claude/",
     ".clawpatch/",
     ".codex/",
+    "!.agents/skills/**",
+    ".agents/**/*.md",
     "AGENTS.md",
     "CLAUDE.md"
   ]

@@ -11,6 +11,16 @@ on:
     paths:
       - pnpm-lock.yaml
 
+# pnpm 11 defaults verify-deps-before-run to "install": the first `pnpm
+# <script>` or `pnpm exec` whose deps-status check sees drift re-runs a full
+# install with lifecycle scripts enabled, silently dropping this workflow's
+# install flags — a prepare hook the hardened --ignore-scripts install skipped
+# then runs in CI. Only this spelling disables it: pnpm reads
+# pnpm_config_verify_deps_before_run raw from the environment, and the
+# npm_config_ spelling is silently ignored.
+env:
+  pnpm_config_verify_deps_before_run: "false"
+
 jobs:
   dedupe-check:
     runs-on: ubuntu-latest
@@ -29,7 +39,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version-file: "package.json"
+          node-version-file: ".node-version"
           cache: "pnpm"
 
       - name: Verify install secret
