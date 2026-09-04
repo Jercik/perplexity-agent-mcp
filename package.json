@@ -49,7 +49,7 @@
   "devDependencies": {
     "@j4k/oxlint-config": "^2.11.0",
     "@total-typescript/ts-reset": "^0.6.1",
-    "@types/node": "^25.6.0",
+    "@types/node": "^24.0.0",
     "fta-check": "^1.5.2",
     "fta-cli": "^3.0.0",
     "knip": "^6.6.3",
@@ -61,7 +61,7 @@
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.15.0"
   },
   "packageManager": "pnpm@11.22.0"
 }

@@ -3,10 +3,12 @@
 set -euo pipefail
 
 ignored_staged_paths=(
-  ":(exclude).agents/**"
   ":(exclude).claude/**"
   ":(exclude).clawpatch/**"
   ":(exclude).codex/**"
+  ":(exclude).agents/rules/**"
+  ":(exclude).agents/*.md"
+  ":(exclude).agents/**/*.md"
 )
 
 git diff --cached --check -- . "${ignored_staged_paths[@]}"
@@ -70,10 +72,9 @@ run_script() {
 
 if [[ -f pnpm-lock.yaml ]] && command -v pnpm >/dev/null 2>&1; then
   if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
-    # Order matters: dedupe is the cheaper read-only check, so fail fast on
-    # lockfile bloat before the heavier lockfile-vs-package.json sync check.
+    # Materialize first: dedupe --check can purge a topology-mismatched node_modules before its check-only phase.
+    pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false --config.optimistic-repeat-install=false
     pnpm dedupe --check --config.confirm-modules-purge=false
-    pnpm install --frozen-lockfile --ignore-scripts --config.confirm-modules-purge=false
   fi
 fi
 
