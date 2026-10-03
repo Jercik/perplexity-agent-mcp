@@ -80,7 +80,7 @@ Default to writing no comments. Add one only to capture what the code cannot sho
 
 Never explain what the code does. Names convey purpose, types convey shape, the code itself conveys behavior. Never reference the current task, fix, or callers ("used by X", "added for the Y flow", "handles the case from issue #123") — those belong in the PR description and rot as the codebase evolves.
 
-Keep the comments you write — docstrings included — to one short line; an example snippet already living in a docstring is documentation to keep type-checking, not a comment to trim.
+Keep the comments you write — docstrings included — as short as the reason they record allows, usually one line; an example snippet already living in a docstring is documentation to keep type-checking, not a comment to trim.
 
 ```ts
 // BAD: references caller context that will rot
@@ -111,7 +111,7 @@ Skip the sketch when the shape is dictated rather than chosen — a schema mirro
 
 # Rule: File Naming Matches Contents
 
-Name files for what the module does: kebab-case, verb-noun or domain-role names, matching the primary export — `calculateUsageRate` goes in `calculate-usage-rate.ts`.
+Name files for what the module does: verb-noun or domain-role names, matching the primary export — `calculateUsageRate` goes in `calculate-usage-rate.ts`. Use kebab-case in TypeScript and JavaScript; in other languages, match the repository's existing files of the same kind. Wherever a toolchain reads meaning into a name, its convention wins: Go's `_test.go` and `_linux.go` suffixes, pytest's default `test_*.py` pattern, and Rust and Python modules imported by name, which must be identifiers.
 
 ## Checklist
 
@@ -157,11 +157,11 @@ function generateExpiryEmails(users: User[]): Array<[string, string]> {
 email.bulkSend(generateExpiryEmails(getExpiredUsers(db.getUsers(), new Date())));
 ```
 
-Test the functional core, not the shell. Core tests are fast, deterministic, and need no mocks; the shell becomes thin orchestration where bugs are easy to spot through review. If shell tests are requested, prefer integration tests over unit tests with mocks.
+The split pays off in tests: core tests are fast, deterministic, and need no mocks, and the shell becomes thin orchestration where bugs are easy to spot through review. Which tests to write, for the core and the shell alike, is governed by the Test What Matters rule.
 
 # Rule: No Logic in Tests
 
-Write test assertions as concrete input/output examples, not computed values — unlike production code that handles varied inputs, tests verify specific cases. Avoid operators, string concatenation, loops, and conditionals in test bodies — these obscure bugs.
+Write test assertions as concrete input/output examples, not computed values — unlike production code that handles varied inputs, tests verify specific cases. Avoid operators, string concatenation, loops, and conditionals in test bodies — these obscure bugs. Two shapes are not this logic: a table of literal cases the framework reports one by one — `it.each`, pytest's `parametrize`, a loop over Go's `t.Run` or Python's `self.subTest` — and a comparison that is itself the assertion, such as pytest's `assert slug == "a-b"` or a Go `if` whose body only fails the test (`if got != want { t.Errorf(…) }`, `if err != nil { t.Fatal(err) }`).
 
 ```ts
 const baseUrl = "http://example.com/";
@@ -179,7 +179,7 @@ Use test utilities for setup and data preparation — fixtures, builders, factor
 
 When checking input data, return a refined type that preserves the knowledge gained — don't just validate and discard. Validation functions that return `void` or a bare `boolean` force callers to re-check conditions or handle "impossible" cases the compiler could rule out — and a check whose result nothing consumes is easy to forget entirely.
 
-Zod embodies this principle: every schema is a parser from `unknown` input to a typed output. Use it at system boundaries to convert external input — JSON, environment variables, API responses — into domain types early.
+Parse external input — JSON, environment variables, API responses — into domain types at the system boundary. In TypeScript, use Zod: every schema is a parser from `unknown` input to a typed output.
 
 ```ts
 import * as z from "zod";
@@ -204,7 +204,7 @@ function handleRequest(body: unknown): User {
 
 # Rule: Test What Matters
 
-Write tests where failure is expensive and the test can stay stable: business rules, public contracts, data transformations, bug regressions, and a thin set of end-to-end flows. Write fewer for pass-through forwarding, private helpers already covered through a public caller, call-count and call-order choreography, wholesale snapshots, and any test whose assertions mirror the implementation instead of the promised behavior.
+Write tests where failure is expensive and the test can stay stable: business rules, data transformations, the functional core's public contracts, and a regression test for every bug you fix, shell code included, unless the compiler would reject the bug if it came back. Beyond those regression tests, leave the imperative shell — CLI entry points, HTTP handlers, database and file I/O — untested unless tests are requested; when they are, prefer a thin set of end-to-end flows over unit tests with mocks. Write fewer for pass-through forwarding, private helpers already covered through a public caller, call-count and call-order choreography, wholesale snapshots, and any test whose assertions mirror the implementation instead of the promised behavior.
 
 ```ts
 // BAD: asserts internal choreography, not the promised behavior
@@ -323,6 +323,14 @@ Map targets to `.ts` — Node runs the source natively, and `tsc` accepts the ta
 # Rule: Use Native TypeScript Execution
 
 Run `.ts` files directly with `node script.ts` — Node 24+ strips types at runtime. No `tsx`, no `ts-node`, no build step. Default new scripts to `.ts`, not `.mjs`.
+
+# Rule: No Changelogs in Your Own Code
+
+Create no changelog or release-notes files (`CHANGELOG.md`, `RELEASE_NOTES.md`, `.changeset/`, `changelog.d/`) and write no changelog entries: the commit message and pull request description carry the history of a change.
+
+When you find an existing one in the repository's own code, move any standing facts it still carries into the package's current documentation in present tense, then delete it. Standing facts are things like upgrade order or rollback limits for versions still in use.
+
+Forks of upstream projects and vendored third-party code keep upstream's convention.
 
 # Rule: Use `repoq` for Repository Queries
 
