@@ -15,6 +15,19 @@ concurrency:
   group: ${{ github.repository }}-release-npm
   cancel-in-progress: true
 
+# pnpm 11 defaults verify-deps-before-run to "install": the first `pnpm
+# <script>` or `pnpm exec` whose deps-status check sees drift re-runs a full
+# install with lifecycle scripts enabled, silently dropping this workflow's
+# install flags — a prepare hook the hardened --ignore-scripts install skipped
+# then runs in CI. Only this spelling disables it: pnpm reads
+# pnpm_config_verify_deps_before_run raw from the environment, and the
+# npm_config_ spelling is silently ignored.
+env:
+  pnpm_config_verify_deps_before_run: "false"
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  pnpm_config_store_dir: /tmp/pnpm-store
+
 jobs:
   release:
     name: Release npm
@@ -42,7 +55,18 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: ".node-version"
-          cache: "pnpm"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Explicit cache steps, not setup-node's `cache: pnpm`: the Forgejo runner's cache server lowercases keys and setup-node compares the matched key case-sensitively, so every hit re-uploaded the store. actions/cache compares them case-insensitively.
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Verify install secret
         env:
@@ -74,3 +98,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm exec semantic-release
+
+      - name: Save pnpm store
+        # Last step, so it saves only after the whole job succeeded, as setup-node's post step did. The key comes from the restore step so install cannot change it.
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}

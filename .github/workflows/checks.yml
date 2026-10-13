@@ -16,6 +16,9 @@ on:
 # npm_config_ spelling is silently ignored.
 env:
   pnpm_config_verify_deps_before_run: "false"
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
   quality-checks:
@@ -29,7 +32,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Strip untrusted project install config
-        # pull_request checks out attacker-controlled code: drop committed .npmrc (redirects installs / leaks the registry token) and both pnpmfile variants .pnpmfile.cjs/.pnpmfile.mjs (pnpm 11 loads .mjs first, and their install hooks run even under --ignore-scripts).
+        # pull_request checks out attacker-controlled code: remove its install config, which can redirect installs or leak the registry token, and its pnpmfiles, whose hooks run even under --ignore-scripts.
         run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
 
       - name: Setup pnpm
@@ -39,7 +42,18 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-          cache: "pnpm"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Explicit cache steps, not setup-node's `cache: pnpm`: the Forgejo runner's cache server lowercases keys and setup-node compares the matched key case-sensitively, so every hit re-uploaded the store. actions/cache compares them case-insensitively.
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Verify install secret
         env:
@@ -64,22 +78,33 @@ jobs:
         run: rm -f ~/.npmrc
 
       - name: Run knip
-        run: pnpm knip
+        run: pnpm run knip
 
       - name: Run format check
-        run: pnpm format:check
+        run: pnpm run format:check
 
       - name: Run typecheck
-        run: pnpm typecheck
+        run: pnpm run typecheck
+
+      - name: Run declaration resolution check
+        run: pnpm run check:dts
 
       - name: Run lint
-        run: pnpm lint
+        run: pnpm run lint
 
       - name: Run fta
-        run: pnpm fta
+        run: pnpm run fta
 
       - name: Run build
-        run: pnpm build
+        run: pnpm run build
 
       - name: Run tests
         run: pnpm run test
+
+      - name: Save pnpm store
+        # Last step, so it saves only after the whole job succeeded, as setup-node's post step did. The key comes from the restore step so install cannot change it.
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}

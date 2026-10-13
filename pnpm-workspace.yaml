@@ -1,9 +1,11 @@
 allowBuilds:
   esbuild: true
-enableGlobalVirtualStore: true
+virtualStoreType: global
 registries:
   default: https://registry.npmjs.org/
   "@j4k": https://code.j4k.dev/api/packages/j4k/npm/
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeExclude:
   - "@j4k/*"
+catalog:
+  conventional-commit-msg: ^1.0.8

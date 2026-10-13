@@ -57,3 +57,4 @@ Desktop.ini
 *.tsv
 *.jsonl
 .claude/worktrees/
+.pnpm-store/
