@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# `@latest` + explicit `--package` dodge two npm footguns: an inherited
-# npm_config_package (agent wrappers like axexec/axrun set it, hijacking
-# `npx -y` into exit 127), and local-root shadowing — without the version,
-# `npm exec` resolves the conventional-commit-msg repo's own package and the
-# bin is "not found", breaking the hook in that repo after prepare wires it up.
-npm exec --yes --package=conventional-commit-msg@latest -- conventional-commit-msg "$1"
+# Native Git hook - enable with: git config core.hooksPath .githooks
+set -euo pipefail
+
+if [[ ! -e node_modules/.bin/conventional-commit-msg ]]; then
+  printf '%s\n' 'conventional-commit-msg is not installed; run `pnpm install` (it must be a devDependency).' >&2
+  exit 127
+fi
+
+# The bin directly: starting pnpm to run the commit-msg script costs more than the check itself, and pnpm 11+ reinstalls first when package.json has drifted from the lockfile. The root commit-msg script exists so knip sees the bin.
+exec node_modules/.bin/conventional-commit-msg "$1"

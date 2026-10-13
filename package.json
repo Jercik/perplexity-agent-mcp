@@ -31,13 +31,15 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc --build tsconfig.app.json --force",
+    "check:dts": "node scripts/check-dts.ts",
+    "commit-msg": "conventional-commit-msg",
     "format": "oxfmt --config .oxfmtrc.json .",
     "format:check": "oxfmt --check --config .oxfmtrc.json .",
     "fta": "fta-check",
     "knip": "knip",
     "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
     "prepack": "pnpm build",
-    "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then git config core.hooksPath .githooks; fi",
+    "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then hooks_path=$(git config --local --get-all core.hooksPath 2>/dev/null && echo .) && [ \"$hooks_path\" = \"$(echo .githooks; echo .)\" ] || git config core.hooksPath .githooks; fi",
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
     "typecheck": "tsc -b --noEmit"
@@ -51,6 +53,7 @@
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^24.0.0",
     "conventional-changelog-conventionalcommits": "^9.3.1",
+    "conventional-commit-msg": "catalog:",
     "fta-check": "^1.5.8",
     "fta-cli": "^3.0.0",
     "knip": "^6.6.3",
@@ -64,5 +67,8 @@
   "engines": {
     "node": ">=24.15.0"
   },
-  "packageManager": "pnpm@11.22.0"
+  "packageManager": "pnpm@12.11.2",
+  "j4k": {
+    "alignDtsCheck": true
+  }
 }

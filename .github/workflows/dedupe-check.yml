@@ -11,15 +11,18 @@ on:
     paths:
       - pnpm-lock.yaml
 
-# pnpm 11 defaults verify-deps-before-run to "install": the first `pnpm
-# <script>` or `pnpm exec` whose deps-status check sees drift re-runs a full
-# install with lifecycle scripts enabled, silently dropping this workflow's
-# install flags — a prepare hook the hardened --ignore-scripts install skipped
-# then runs in CI. Only this spelling disables it: pnpm reads
-# pnpm_config_verify_deps_before_run raw from the environment, and the
-# npm_config_ spelling is silently ignored.
+# pnpm 11 defaults verify-deps-before-run to "install": a `pnpm <script>` or
+# `pnpm exec` whose deps-status check sees drift re-runs a full install with
+# lifecycle scripts enabled, ignoring the install step's flags. This workflow
+# runs neither, but pins the guard like every other pnpm-running workflow
+# j4k-align manages. Only this spelling disables it:
+# pnpm reads pnpm_config_verify_deps_before_run raw from the environment, and
+# the npm_config_ spelling is silently ignored.
 env:
   pnpm_config_verify_deps_before_run: "false"
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
   dedupe-check:
@@ -30,7 +33,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Strip untrusted project install config
-        # pull_request checks out attacker-controlled code: drop committed .npmrc (redirects installs / leaks the registry token) and both pnpmfile variants .pnpmfile.cjs/.pnpmfile.mjs (pnpm 11 loads .mjs first, and their install hooks run even under --ignore-scripts).
+        # pull_request checks out attacker-controlled code: remove its install config, which can redirect installs or leak the registry token, and its pnpmfiles, whose hooks run even under --ignore-scripts.
         run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
 
       - name: Setup pnpm
@@ -40,7 +43,18 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: ".node-version"
-          cache: "pnpm"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Explicit cache steps, not setup-node's `cache: pnpm`: the Forgejo runner's cache server lowercases keys and setup-node compares the matched key case-sensitively, so every hit re-uploaded the store. actions/cache compares them case-insensitively.
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
 
       - name: Verify install secret
         env:
@@ -61,5 +75,13 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
 
       - name: Check for dedupe opportunities
-        # --ignore-pnpmfile is load-bearing: pnpm dedupe runs the full install pipeline and loads pnpmfiles gated only by ignore-pnpmfile, NOT --ignore-scripts, so without it a PR-set pnpmfile: path in pnpm-workspace.yaml (surviving the .pnpmfile.* strip) executes arbitrary code with the registry token in ~/.npmrc. No token strip: dedupe needs the private registry and both ignore flags block every untrusted code path.
+        # Keep --ignore-pnpmfile: pnpm loads pnpmfiles for every command and --ignore-scripts does not block them, so a PR could point pnpm-workspace.yaml's pnpmfile setting at a file that survives the .pnpmfile.* strip and runs arbitrary code with the registry token in ~/.npmrc. Keep registry credentials available for authenticated dedupe.
         run: pnpm dedupe --check --ignore-scripts --ignore-pnpmfile
+
+      - name: Save pnpm store
+        # Last step, so it saves only after the whole job succeeded, as setup-node's post step did. The key comes from the restore step so install cannot change it.
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
