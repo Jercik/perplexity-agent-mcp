@@ -2,19 +2,17 @@
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import {
-  GuardFailureError,
-  isRecord,
-  moduleSpecifier,
-  repositoryRoot,
-  type Diagnostic,
-  type Finding,
-  type LeafReport,
-} from "./check-dts-core.ts";
-import { requireOrderlyRun, runTypeScript, type ProcessResult } from "./check-dts-process.ts";
+import { GuardFailureError, isRecord, moduleSpecifier, repositoryRoot } from "./check-dts-core.ts";
+import type { Diagnostic, Finding, LeafReport } from "./check-dts-core.ts";
+import { requireOrderlyRun, runTypeScript } from "./check-dts-process.ts";
+import type { ProcessResult } from "./check-dts-process.ts";
 
-// Cannot find module, no declaration file for module, no type definition file.
-const RESOLUTION_ERROR_CODES: ReadonlySet<number> = new Set([2307, 7016, 2688]);
+// Codes that mean an import or reference in a declaration file did not resolve.
+// Which codes count, and why the neighbouring ones do not, is decision 10 of
+// align's ADR 0005.
+const RESOLUTION_ERROR_CODES: ReadonlySet<number> = new Set([
+  2307, 2882, 7016, 2688, 2726, 2727, 2591, 2580,
+]);
 const DIAGNOSTIC_LINE = /^(?:(?<file>.+?)\(\d+,\d+\): )?error TS(?<code>\d+): (?<message>.*)$/u;
 const INSIDE_NODE_MODULES = /(?:^|\/)node_modules\//u;
 // Typecheck runs with skipLibCheck, so the repository's own declaration files

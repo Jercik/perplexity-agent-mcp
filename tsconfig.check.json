@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2025", "ESNext.Array", "ESNext.Error"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": [
+    "*.ts",
+    "*.mts",
+    "*.cts",
+    "*.tsx",
+    "types/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.mts",
+    "src/**/*.cts",
+    "src/**/*.tsx"
+  ],
+  "exclude": ["node_modules", "dist", "**/*.test.*", "**/*.spec.*"]
+}

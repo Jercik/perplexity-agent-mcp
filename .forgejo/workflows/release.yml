@@ -1,0 +1,663 @@
+---
+name: Release
+
+# Required PR status checks are intentionally disabled, so release reruns the
+# managed quality suite on the merged revision before publishing.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.repository }}-release-forgejo
+  # Never cancel: a run cancelled mid-release can leave a tag without its published artifacts.
+  cancel-in-progress: false
+
+# pnpm defaults verify-deps-before-run to "install": the first `pnpm
+# <script>` or `pnpm exec` whose deps-status check sees drift re-runs a full
+# install with lifecycle scripts enabled, silently dropping this workflow's
+# install flags — a prepare hook the hardened --ignore-scripts install skipped
+# then runs in CI. Only this spelling disables it: pnpm reads
+# pnpm_config_verify_deps_before_run raw from the environment, and the
+# npm_config_ spelling is silently ignored.
+env:
+  pnpm_config_verify_deps_before_run: "false"
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  pnpm_config_store_dir: /tmp/pnpm-store
+
+jobs:
+  # Runs queue one at a time, and semantic-release publishes nothing once main has moved on, so on a superseded run this job sets is-tip to false; gate dependent jobs on that output to skip them.
+  check-tip:
+    name: Check tip
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      is-tip: ${{ steps.tip.outputs.is-tip }}
+    steps:
+      - name: Compare with the tip of main
+        id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          refs="$(git -c "http.$GITHUB_SERVER_URL/.extraheader=Authorization: Basic $auth" ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" refs/heads/main)"
+          # ls-remote patterns are suffix matches, so this also lists refs/heads/*/refs/heads/main.
+          tip="$(printf '%s\n' "$refs" | awk -F'\t' '$2 == "refs/heads/main" { print $1 }')"
+          if [ -z "$tip" ]; then
+            echo "::error::Could not read the tip of main."
+            exit 1
+          fi
+          if [ "$tip" = "$SHA" ]; then
+            echo "is-tip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping: $SHA is superseded by $tip."
+            echo "is-tip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  quality-checks:
+    needs: check-tip
+    if: needs.check-tip.outputs.is-tip == 'true'
+    uses: ./.forgejo/workflows/checks.yml
+    with:
+      release_gate: true
+    secrets: inherit
+
+  release:
+    name: Release
+    needs: quality-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Set on this job only: the npm-mirror job below reads public endpoints only and must not hold a credential that can mint a registry write token, and a workflow-level key would hand it one. Forgejo 16.0.x resolves the job key over the workflow one.
+    enable-openid-connect: true
+    outputs:
+      new-release-version: ${{ steps.release.outputs.version }}
+      forge-integrity: ${{ steps.integrity.outputs.integrity }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ".node-version"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Not setup-node's `cache: pnpm`: the Forgejo runner's cache server lowercases keys and setup-node compares the matched key case-sensitively, so an exact hit never counts as one there and the store is uploaded again. actions/cache compares them case-insensitively.
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Configure registry auth
+        env:
+          PUBLISH_AUDIENCE: ${{ vars.NPM_PUBLISH_OSS_AUDIENCE }}
+          EXPECTED_OWNER: "j4k-oss"
+          EXPECTED_NAME: "perplexity-agent-mcp"
+          EXPECTED_REGISTRY: "https://code.j4k.dev/api/packages/j4k-oss/npm/"
+          NPM_READ_AUDIENCE: ${{ vars.NPM_READ_AUDIENCE }}
+        run: |
+          set -eu
+          if [ -z "${PUBLISH_AUDIENCE:-}" ]; then
+            echo "::error::NPM_PUBLISH_OSS_AUDIENCE variable is not set. It is the server-generated audience for the org npm-publisher-oss integration; reconcile it from j4k-cluster."
+            exit 1
+          fi
+          if [ -z "${NPM_READ_AUDIENCE:-}" ]; then
+            echo "::error::NPM_READ_AUDIENCE variable is not set. It is the server-generated audience for the org npm-reader integration; reconcile it from j4k-cluster."
+            exit 1
+          fi
+          # Fail with a clear message, not a raw curl error, when the OIDC request vars are absent (enable-openid-connect inactive).
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::No Actions OIDC token on this run (enable-openid-connect inactive)."
+            exit 1
+          fi
+          # Mint the per-run write:package token for the publish. Forgejo appends
+          # `&audience=` to the placeholder-terminated request URL and returns
+          # {"value": "<jwt>"}; pnpm ignores env references in credentials it does
+          # not expand itself, so the token is written literally into the trusted
+          # user-level ~/.npmrc.
+          NODE_AUTH_TOKEN="$(
+            curl -fsSL \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL:-}&audience=${PUBLISH_AUDIENCE}" \
+              | sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p'
+          )"
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Failed to obtain an Actions OIDC token for the npm publish."
+            exit 1
+          fi
+          # A curl-fetched token is not auto-masked like a secrets.* value; register it so no later step can print it.
+          echo "::add-mask::${NODE_AUTH_TOKEN}"
+          # The oss-publisher integration mints for every repository on its claim list and the token writes any package in the org, so assert that this run is the package it is about to publish before the token is used: a repository that is not j4k-oss/perplexity-agent-mcp, or a package.json that names another package or registry, must fail here, before anything is tagged or published.
+          OIDC_TOKEN="${NODE_AUTH_TOKEN}" node --input-type=module - <<'EOF'
+          import { readFileSync } from "node:fs";
+
+          const { OIDC_TOKEN, EXPECTED_OWNER, EXPECTED_NAME, EXPECTED_REGISTRY } = process.env;
+          const [, payload = ""] = OIDC_TOKEN.split(".");
+          const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+          const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+          const repositoryName = String(claims.repository).split("/")[1];
+          const expected = [
+            ["repository_owner claim", claims.repository_owner, EXPECTED_OWNER],
+            ["repository claim", claims.repository, EXPECTED_OWNER + "/" + EXPECTED_NAME],
+            ["package.json name", manifest.name, "@" + EXPECTED_OWNER + "/" + repositoryName],
+            ["package.json name", manifest.name, "@" + EXPECTED_OWNER + "/" + EXPECTED_NAME],
+            ["package.json publishConfig.registry", manifest.publishConfig?.registry, EXPECTED_REGISTRY],
+          ];
+          const mismatches = expected
+            .filter(([, actual, wanted]) => actual !== wanted)
+            .map(([label, actual, wanted]) => label + " is " + JSON.stringify(actual) + ", expected " + JSON.stringify(wanted));
+          if (mismatches.length > 0) {
+            console.error("::error::The Actions OIDC token does not name the package this run publishes: " + mismatches.join("; "));
+            process.exit(1);
+          }
+          EOF
+          echo "//code.j4k.dev/api/packages/j4k-oss/npm/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          # The publish token identity (oss-publisher) cannot read the private @j4k
+          # registry, so a second npm-reader token authenticates the @j4k install
+          # line. This credential reads the entire private @j4k registry; it is
+          # masked, and the request vars are blanked below so no later step can
+          # re-mint — but the token itself stays in ~/.npmrc through the publish
+          # (ADR-0009 accepted risk; the install runs --ignore-scripts).
+          NODE_AUTH_READ_TOKEN="$(
+            curl -fsSL \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL:-}&audience=${NPM_READ_AUDIENCE}" \
+              | sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p'
+          )"
+          if [ -z "${NODE_AUTH_READ_TOKEN:-}" ]; then
+            echo "::error::Failed to obtain an Actions OIDC token for the private registry install."
+            exit 1
+          fi
+          echo "::add-mask::${NODE_AUTH_READ_TOKEN}"
+          echo "//code.j4k.dev/api/packages/j4k/npm/:_authToken=${NODE_AUTH_READ_TOKEN}" >> ~/.npmrc
+          # The job-level enable-openid-connect exposes ACTIONS_ID_TOKEN_REQUEST_* to every step of this job; blank them so no later step can mint another token.
+          printf 'ACTIONS_ID_TOKEN_REQUEST_URL=\nACTIONS_ID_TOKEN_REQUEST_TOKEN=\n' >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        # Dependency install scripts must not run while an npm token is in ~/.npmrc: any dependency's install script could steal the publish token and publish packages with it, or the read token that reaches every package in the private registry; the package's own prepack, if it defines one, still runs when semantic-release publishes it.
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Release
+        id: release
+        env:
+          FORGEJO_TOKEN: ${{ github.token }}
+          FORGEJO_URL: ${{ github.server_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec semantic-release
+          # The released version is this step's output for later steps and jobs. @j4k/semantic-release-github-output would write it, but that plugin lives in the private registry, which a public package cannot install from. semantic-release tags the released commit before it publishes, so the tag on HEAD names the version, and a rerun of an already released commit finds the same tag.
+          tag="$(git tag --points-at HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [ -n "$tag" ]; then
+            echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record the Forge tarball integrity
+        id: integrity
+        if: steps.release.outputs.version != ''
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          SCOPED: "@j4k-oss/perplexity-agent-mcp"
+          OSS: https://code.j4k.dev/api/packages/j4k-oss/npm/
+          RELEASE_API: https://code.j4k.dev/api/v1/repos/j4k-oss/perplexity-agent-mcp
+          FORGEJO_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/forge-tarball"
+          mkdir -p "$work"
+          (cd "$work" && npm pack "$SCOPED@$VERSION" "--@j4k-oss:registry=$OSS" --loglevel=warn > /dev/null)
+          tarballs=("$work"/*.tgz)
+          [ "${#tarballs[@]}" -eq 1 ] || { echo "::error::expected one tarball of $SCOPED@$VERSION in $work"; exit 1; }
+          integrity="$(node -e 'process.stdout.write("sha512-" + require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("base64"))' "${tarballs[0]}")"
+          registry_integrity="$(npm view "$SCOPED@$VERSION" dist.integrity "--@j4k-oss:registry=$OSS")"
+          [ "$integrity" = "$registry_integrity" ] || { echo "::error::$SCOPED@$VERSION tarball has integrity $integrity, not the $registry_integrity the registry reports"; exit 1; }
+          INTEGRITY="$integrity" node --input-type=module - <<'EOF'
+          const { VERSION, INTEGRITY, RELEASE_API, FORGEJO_TOKEN } = process.env;
+          const RECORD_PATTERN = /^Forge tarball integrity: (sha512-[A-Za-z0-9+/]+={0,2})\r?$/gmu;
+          if (!/^sha512-[A-Za-z0-9+/]+={0,2}$/u.test(INTEGRITY ?? "")) {
+            console.error("::error::INTEGRITY is " + JSON.stringify(INTEGRITY) + ", not a sha512 integrity");
+            process.exit(1);
+          }
+          const headers = {
+            accept: "application/json",
+            authorization: "token " + FORGEJO_TOKEN,
+            "content-type": "application/json",
+          };
+
+          async function call(url, init) {
+            const response = await fetch(url, { ...init, headers, signal: AbortSignal.timeout(30_000) });
+            if (!response.ok) {
+              throw new Error(init.method + " " + url + " returned " + response.status);
+            }
+            return response.json();
+          }
+
+          function recordedIntegrities(body) {
+            return [...String(body ?? "").matchAll(RECORD_PATTERN)].map((match) => match[1]);
+          }
+
+          const release = await call(RELEASE_API + "/releases/tags/v" + VERSION, { method: "GET" });
+          const recorded = recordedIntegrities(release.body);
+          if (recorded.length > 1 || (recorded.length === 1 && recorded[0] !== INTEGRITY)) {
+            console.error("::error::The Forge release v" + VERSION + " already records " + recorded.join(", ") + ", not " + INTEGRITY);
+            process.exit(1);
+          }
+          if (recorded.length === 0) {
+            const body = String(release.body ?? "").trimEnd() + "\n\nForge tarball integrity: " + INTEGRITY + "\n";
+            const updated = await call(RELEASE_API + "/releases/" + release.id, { method: "PATCH", body: JSON.stringify({ body }) });
+            if (recordedIntegrities(updated.body).join() !== INTEGRITY) {
+              console.error("::error::The Forge release v" + VERSION + " does not carry the integrity after the update");
+              process.exit(1);
+            }
+          }
+          console.log("ok: the Forge release v" + VERSION + " records " + INTEGRITY);
+          EOF
+          echo "integrity=$integrity" >> "$GITHUB_OUTPUT"
+
+      - name: Save pnpm store
+        # Last step, so it saves only after the whole job succeeded. The key comes from the restore step so install cannot change it.
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
+
+  # The GitHub mirror copies this release to npmjs from the tag the push mirror delivers, and nothing on the Forge sees that run. This job waits for the version on npmjs, then verifies that copy against the Forge release in the steps below, so a mirror that never ran, or published something else, turns this run red. It is a job here and not a tag-triggered workflow because Forgejo drops events whose actor is the Actions user, and semantic-release pushes its tag as that user. It reads public endpoints only, so it holds no OIDC request credential (see enable-openid-connect on the release job).
+  npm-mirror:
+    name: Verify npm mirror
+    needs: release
+    if: needs.release.outputs.new-release-version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NAME: "perplexity-agent-mcp"
+      SCOPED: "@j4k-oss/perplexity-agent-mcp"
+      VERSION: ${{ needs.release.outputs.new-release-version }}
+      FORGE_INTEGRITY: ${{ needs.release.outputs.forge-integrity }}
+      OSS: https://code.j4k.dev/api/packages/j4k-oss/npm/
+      MIRROR_OWNER: "Jercik"
+      NPM_ACCOUNT: "jercik"
+      WORKFLOW_PATH: ".github/workflows/release-npm.yml"
+      GITHUB_VISIBILITY: "public"
+      TRUSTED_PUBLISHER_ID: "github"
+      OIDC_CONFIG_ID: "oidc:3c45004b-925a-49c0-873d-3fc47575114d"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26.5.0"
+
+      - name: Wait for the version on npmjs
+        run: |
+          set -euo pipefail
+          url="https://registry.npmjs.org/$NAME/$VERSION"
+          deadline=$((SECONDS + 1200))
+          until [ "$(curl -s -o /dev/null -w '%{http_code}' "$url")" = "200" ]; do
+            (( SECONDS < deadline )) || { echo "::error::$NAME@$VERSION is not on npmjs after 20 minutes; check the release-npm.yml run on GitHub, or dispatch it on the tag v$VERSION"; exit 1; }
+            sleep 30
+          done
+
+      - name: Check the npm account, publisher, provenance and dist-tag
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'EOF'
+          import { execFileSync } from "node:child_process";
+
+          const {
+            NAME,
+            VERSION,
+            MIRROR_OWNER,
+            NPM_ACCOUNT,
+            WORKFLOW_PATH,
+            GITHUB_VISIBILITY,
+            TRUSTED_PUBLISHER_ID,
+            OIDC_CONFIG_ID,
+            PRE_MIGRATION_BASELINE,
+          } = process.env;
+          const NPMJS = "https://registry.npmjs.org";
+          const MAX_ATTEMPTS = 4;
+          const MAX_WAIT_SECONDS = 120;
+          const DEFAULT_WAIT_SECONDS = 15;
+          const REQUEST_TIMEOUT_MS = 30_000;
+          const failures = [];
+
+          function hintedWaitSeconds(response) {
+            const retryAfter = response.headers.get("retry-after");
+            if (retryAfter !== null) {
+              const seconds = Number(retryAfter);
+              if (Number.isFinite(seconds)) {
+                return seconds;
+              }
+              const date = Date.parse(retryAfter);
+              return Number.isNaN(date) ? undefined : (date - Date.now()) / 1000;
+            }
+            const reset = Number(response.headers.get("x-ratelimit-reset"));
+            return reset > 0 ? reset - Date.now() / 1000 : undefined;
+          }
+
+          // 403 and 429 are how GitHub and npm refuse a client over its rate limit; waiting
+          // out a short window is the only remedy, and a window longer than the bound fails
+          // the job instead of holding the runner.
+          async function get(url) {
+            for (let attempt = 1; ; attempt += 1) {
+              const response = await fetch(url, {
+                headers: { accept: "application/json" },
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+              });
+              const limited = response.status === 403 || response.status === 429;
+              const wait = Math.max(hintedWaitSeconds(response) ?? DEFAULT_WAIT_SECONDS, 0);
+              if (!limited || attempt === MAX_ATTEMPTS || wait > MAX_WAIT_SECONDS) {
+                return { status: response.status, body: response.ok ? await response.json() : undefined };
+              }
+              console.log("GET " + url + " returned " + response.status + "; retrying in " + Math.ceil(wait) + "s");
+              await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+            }
+          }
+
+          async function getOk(url) {
+            const { status, body } = await get(url);
+            if (body === undefined) {
+              throw new Error("GET " + url + " returned " + status);
+            }
+            return body;
+          }
+
+          function expect(label, actual, wanted) {
+            if (JSON.stringify(actual) === JSON.stringify(wanted)) {
+              console.log("ok: " + label);
+            } else {
+              failures.push(label + " is " + JSON.stringify(actual) + ", expected " + JSON.stringify(wanted));
+            }
+          }
+
+          function resolveTagCommit() {
+            const url = "https://github.com/" + MIRROR_OWNER + "/" + NAME + ".git";
+            const tag = "refs/tags/v" + VERSION;
+            const lines = execFileSync("git", ["ls-remote", url, tag, tag + "^{}"], {
+              encoding: "utf8",
+              env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+            })
+              .split("\n")
+              .filter((line) => line !== "")
+              .map((line) => line.split("\t"));
+            const found = lines.find(([, ref]) => ref === tag + "^{}") ?? lines.find(([, ref]) => ref === tag);
+            if (found === undefined) {
+              throw new Error(tag + " is not on " + url);
+            }
+            return found[0];
+          }
+
+          function verifyProvenance(provenance, integrity) {
+            const statement = JSON.parse(Buffer.from(provenance.bundle.dsseEnvelope.payload, "base64").toString("utf8"));
+            const digest = /^sha512-(.+)$/u.exec(integrity ?? "");
+            expect(
+              "provenance subject",
+              (statement.subject ?? []).map((subject) => [subject.name, subject.digest?.sha512]),
+              [["pkg:npm/" + NAME + "@" + VERSION, digest === null ? "no sha512 integrity" : Buffer.from(digest[1], "base64").toString("hex")]],
+            );
+            const workflow = statement.predicate.buildDefinition.externalParameters.workflow;
+            expect("provenance repository and workflow", [workflow.repository, workflow.path], ["https://github.com/" + MIRROR_OWNER + "/" + NAME, WORKFLOW_PATH]);
+            const tagRef = "refs/tags/v" + VERSION;
+            // The mirror workflow publishes only from a release tag, so a mirrored version's ref and commit are always bound to the Forge tag. A version npm published before the migration ran from main, which names no tag; only a baseline run outside this workflow, which sets this variable, accepts that.
+            if (PRE_MIGRATION_BASELINE === "true" && workflow.ref === "refs/heads/main") {
+              console.log("ok: pre-migration baseline: provenance ref refs/heads/main accepted, its commit is not bound");
+              return;
+            }
+            if (workflow.ref !== tagRef) {
+              failures.push("provenance ref is " + JSON.stringify(workflow.ref) + ", expected " + tagRef);
+              return;
+            }
+            const commit = (statement.predicate.buildDefinition.resolvedDependencies ?? []).find((dependency) => dependency.digest?.gitCommit !== undefined)?.digest.gitCommit;
+            expect("provenance commit of " + workflow.ref, commit, resolveTagCommit());
+          }
+
+          expect("npmjs collaborators of " + NAME, await getOk(NPMJS + "/-/package/" + NAME + "/collaborators"), Object.fromEntries([[NPM_ACCOUNT, "write"]]));
+
+          const manifest = await getOk(NPMJS + "/" + NAME + "/" + VERSION);
+          expect("maintainers of " + NAME + "@" + VERSION, (manifest.maintainers ?? []).map((maintainer) => maintainer.name), [NPM_ACCOUNT]);
+          const publisher = manifest._npmUser;
+          expect("_npmUser of " + NAME + "@" + VERSION, publisher?.name + " <" + publisher?.email + ">", "GitHub Actions <npm-oidc-no-reply@github.com>");
+          expect("trusted publisher of " + NAME + "@" + VERSION, [publisher?.trustedPublisher?.id, publisher?.trustedPublisher?.oidcConfigId], [TRUSTED_PUBLISHER_ID, OIDC_CONFIG_ID]);
+
+          // Visibility comes from policy, not from what the probe answers: npm attaches provenance only to a publish from a public repository, so a public package whose repository now answers 404 must fail instead of passing as private.
+          if (GITHUB_VISIBILITY !== "public" && GITHUB_VISIBILITY !== "private") {
+            throw new Error("GITHUB_VISIBILITY is " + JSON.stringify(GITHUB_VISIBILITY) + ", expected public or private");
+          }
+          const repository = await get("https://api.github.com/repos/" + MIRROR_OWNER + "/" + NAME);
+          if (repository.status === 200 && typeof repository.body.private !== "boolean") {
+            throw new Error("GitHub answered for " + MIRROR_OWNER + "/" + NAME + " without a private flag");
+          }
+          if (repository.status !== 200 && repository.status !== 404) {
+            throw new Error("GET https://api.github.com/repos/" + MIRROR_OWNER + "/" + NAME + " returned " + repository.status + "; cannot tell whether the mirror repository is public");
+          }
+          expect(
+            "anonymous GitHub view of " + MIRROR_OWNER + "/" + NAME,
+            repository.status === 200 && repository.body.private === false ? "public" : "hidden",
+            GITHUB_VISIBILITY === "public" ? "public" : "hidden",
+          );
+
+          // Checked whenever npmjs holds attestations, so a private package that somehow carries one is bound too.
+          const attestations = await get(NPMJS + "/-/npm/v1/attestations/" + NAME + "@" + VERSION);
+          if (attestations.status !== 200 && attestations.status !== 404) {
+            throw new Error("GET " + NPMJS + "/-/npm/v1/attestations/" + NAME + "@" + VERSION + " returned " + attestations.status);
+          }
+          const provenance = (attestations.body?.attestations ?? []).find((attestation) => attestation.predicateType === "https://slsa.dev/provenance/v1");
+          if (provenance !== undefined) {
+            verifyProvenance(provenance, manifest.dist?.integrity);
+          } else if (GITHUB_VISIBILITY === "public") {
+            failures.push("npmjs holds no SLSA provenance for " + NAME + "@" + VERSION);
+          }
+
+          expect("dist-tags.latest of " + NAME, (await getOk(NPMJS + "/-/package/" + NAME + "/dist-tags")).latest, VERSION);
+
+          for (const failure of failures) {
+            console.error("::error::" + failure);
+          }
+          process.exit(failures.length > 0 ? 1 : 0);
+          EOF
+
+      - name: Compare the npm tarball with the Forge release
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/compare"
+          mkdir -p "$work/npm" "$work/forge"
+          (cd "$work/npm" && npm pack "$NAME@$VERSION" --registry https://registry.npmjs.org/ --loglevel=warn > /dev/null)
+          (cd "$work/forge" && npm pack "$SCOPED@$VERSION" "--@j4k-oss:registry=$OSS" --loglevel=warn > /dev/null)
+          npm_tarballs=("$work"/npm/*.tgz)
+          forge_tarballs=("$work"/forge/*.tgz)
+          [ "${#npm_tarballs[@]}" -eq 1 ] && [ "${#forge_tarballs[@]}" -eq 1 ] || { echo "::error::expected one tarball per registry in $work"; exit 1; }
+          # The release job recorded the integrity of the tarball it published; the Forge registry must still serve exactly those bytes, or the copy would be compared against something nobody released.
+          forge_integrity="$(node -e 'process.stdout.write("sha512-" + require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("base64"))' "${forge_tarballs[0]}")"
+          [ "$forge_integrity" = "$FORGE_INTEGRITY" ] || { echo "::error::The Forge tarball of $SCOPED@$VERSION has integrity $forge_integrity, not the $FORGE_INTEGRITY its release job published"; exit 1; }
+          REPOSITORY_URL="git+https://github.com/$MIRROR_OWNER/$NAME.git" node --input-type=module - "${npm_tarballs[0]}" "${forge_tarballs[0]}" <<'EOF'
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          import { isDeepStrictEqual } from "node:util";
+          import { gunzipSync } from "node:zlib";
+
+          const BLOCK_SIZE = 512;
+          const MANIFEST_PATH = "package/package.json";
+          const FILE_TYPES = new Set(["0", "\0", "7"]);
+          const MEMBER_TYPES = new Set([...FILE_TYPES, "1", "2", "5"]);
+
+          function readText(bytes) {
+            const end = bytes.indexOf(0);
+            return bytes.subarray(0, end === -1 ? bytes.length : end).toString("utf8");
+          }
+
+          function readOctal(bytes, field) {
+            if ((bytes[0] ?? 0) & 0x80) {
+              throw new Error("tar " + field + " uses the base-256 encoding, which npm tarballs never need");
+            }
+            const text = readText(bytes).trim();
+            if (!/^[0-7]*$/u.test(text)) {
+              throw new Error("tar " + field + " is not octal: " + JSON.stringify(text));
+            }
+            return text === "" ? 0 : Number.parseInt(text, 8);
+          }
+
+          function checksum(header) {
+            let sum = 0;
+            for (let index = 0; index < BLOCK_SIZE; index += 1) {
+              sum += index >= 148 && index < 156 ? 0x20 : header[index];
+            }
+            return sum;
+          }
+
+          function parsePax(body) {
+            const records = {};
+            let offset = 0;
+            while (offset < body.length) {
+              const space = body.indexOf(0x20, offset);
+              const length = Number.parseInt(body.subarray(offset, space).toString("utf8"), 10);
+              if (space === -1 || !Number.isInteger(length) || length <= space - offset + 1 || offset + length > body.length) {
+                throw new Error("tar has a malformed pax header");
+              }
+              const record = body.subarray(space + 1, offset + length - 1).toString("utf8");
+              const equals = record.indexOf("=");
+              records[record.slice(0, equals)] = record.slice(equals + 1);
+              offset += length;
+            }
+            return records;
+          }
+
+          function readArchive(file) {
+            const data = gunzipSync(readFileSync(file));
+            const members = new Map();
+            let offset = 0;
+            let pax = {};
+            let longPath;
+            let longLink;
+            let ended = false;
+            while (offset + BLOCK_SIZE <= data.length) {
+              const header = data.subarray(offset, offset + BLOCK_SIZE);
+              if (header.every((byte) => byte === 0)) {
+                ended = true;
+                break;
+              }
+              if (readOctal(header.subarray(148, 156), "checksum") !== checksum(header)) {
+                throw new Error("tar header at byte " + offset + " fails its checksum");
+              }
+              const size = readOctal(header.subarray(124, 136), "size");
+              const type = String.fromCharCode(header[156]);
+              const bodyStart = offset + BLOCK_SIZE;
+              if (bodyStart + size > data.length) {
+                throw new Error("tar is truncated inside a member");
+              }
+              const body = data.subarray(bodyStart, bodyStart + size);
+              offset = bodyStart + Math.ceil(size / BLOCK_SIZE) * BLOCK_SIZE;
+              if (type === "x") {
+                pax = { ...pax, ...parsePax(body) };
+                continue;
+              }
+              if (type === "L") {
+                longPath = readText(body);
+                continue;
+              }
+              if (type === "K") {
+                longLink = readText(body);
+                continue;
+              }
+              if (!MEMBER_TYPES.has(type)) {
+                throw new Error("tar member of unsupported type " + JSON.stringify(type));
+              }
+              if (pax.size !== undefined) {
+                throw new Error("tar pax size overrides are not supported");
+              }
+              const prefix = readText(header.subarray(345, 500));
+              const ustar = readText(header.subarray(257, 263)) === "ustar";
+              const name = pax.path ?? longPath ?? (ustar && prefix !== "" ? prefix + "/" : "") + readText(header.subarray(0, 100));
+              if (members.has(name)) {
+                throw new Error("tar holds " + name + " twice");
+              }
+              members.set(name, {
+                type: FILE_TYPES.has(type) ? "file" : type,
+                mode: readOctal(header.subarray(100, 108), "mode") & 0o7777,
+                link: pax.linkpath ?? longLink ?? readText(header.subarray(157, 257)),
+                sha256: createHash("sha256").update(body).digest("hex"),
+                body,
+              });
+              pax = {};
+              longPath = undefined;
+              longLink = undefined;
+            }
+            if (!ended) {
+              throw new Error(file + " has no tar end marker; it is truncated or not a tar archive");
+            }
+            if (members.size === 0) {
+              throw new Error(file + " holds no members");
+            }
+            return members;
+          }
+
+          function describe(member) {
+            return member.type + " mode " + member.mode.toString(8) + " sha256 " + member.sha256 + (member.link === "" ? "" : " -> " + member.link);
+          }
+
+          const { NAME, SCOPED, REPOSITORY_URL } = process.env;
+          const [mirrorFile, forgeFile] = process.argv.slice(2);
+          const mirror = readArchive(mirrorFile);
+          const forge = readArchive(forgeFile);
+          const failures = [];
+
+          for (const path of new Set([...mirror.keys(), ...forge.keys()])) {
+            const mirrored = mirror.get(path);
+            const released = forge.get(path);
+            if (mirrored === undefined || released === undefined) {
+              failures.push(path + " is only in the " + (mirrored === undefined ? "Forge" : "npm") + " tarball");
+            } else if (path !== MANIFEST_PATH && describe(mirrored) !== describe(released)) {
+              failures.push(path + " differs: npm " + describe(mirrored) + ", Forge " + describe(released));
+            } else if (path === MANIFEST_PATH && (mirrored.type !== "file" || released.type !== "file" || mirrored.mode !== released.mode)) {
+              failures.push(path + " differs in type or mode: npm " + describe(mirrored) + ", Forge " + describe(released));
+            }
+          }
+
+          const mirroredManifest = mirror.get(MANIFEST_PATH);
+          const releasedManifest = forge.get(MANIFEST_PATH);
+          if (mirroredManifest !== undefined && releasedManifest !== undefined) {
+            const npm = JSON.parse(mirroredManifest.body.toString("utf8"));
+            const released = JSON.parse(releasedManifest.body.toString("utf8"));
+            if (npm.name !== NAME || released.name !== SCOPED) {
+              failures.push("package names are " + npm.name + " (npm) and " + released.name + " (Forge), expected " + NAME + " and " + SCOPED);
+            }
+            if (npm.repository?.url !== REPOSITORY_URL) {
+              failures.push("npm repository.url is " + npm.repository?.url + ", expected " + REPOSITORY_URL);
+            }
+            if (npm.publishConfig !== undefined) {
+              failures.push("the npm copy kept publishConfig");
+            }
+            for (const manifest of [npm, released]) {
+              delete manifest.name;
+              delete manifest.repository?.url;
+              delete manifest.publishConfig;
+            }
+            if (!isDeepStrictEqual(npm, released)) {
+              failures.push("package.json differs beyond name, repository.url and publishConfig");
+            }
+          }
+
+          for (const failure of failures) {
+            console.error("::error::" + failure);
+          }
+          if (failures.length > 0) {
+            process.exit(1);
+          }
+          console.log("ok: " + mirror.size + " archive members match, package.json differs only in name, repository.url and publishConfig");
+          EOF

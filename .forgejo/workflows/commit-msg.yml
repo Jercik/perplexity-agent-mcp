@@ -1,8 +1,7 @@
 ---
 name: commit-msg
 
-# Validate on pull_request only; a post-merge --last check would choke on the
-# immutable, auto-composed squash body whose lines exceed the body-length limit.
+# Validate the current PR title and the subjects selected for a rebase.
 
 on:
   pull_request:
@@ -10,49 +9,38 @@ on:
     # fires on title and body edits, so a title change rechecks the squash subject.
     types: [opened, synchronize, reopened, edited]
 
-permissions:
-  contents: read
-  # Reading the current pull request needs more than contents: read.
-  pull-requests: read
-
 jobs:
   commitlint:
+    # When a trusted user edits or reopens a fork or AGit PR whose poster lacks
+    # Actions trust, Forgejo runs this base copy without approval. The job checks
+    # out that PR's head and executes its checker, so the PR's code would run
+    # on a root runner. Fork and
+    # AGit PRs therefore skip this check, and a skip is not a pass.
+    # Forgejo treats an AGit PR as a fork: its poster's own events run the head
+    # copy, where this guard could be deleted, only after approval.
+    # head.repo.fork is unreliable; AGit reuses repo identity without push access.
+    # Keep toJSON: a bare flow == 0 also admits a missing, null, '' or '0' flow (all coerce to 0).
+    if: github.event.pull_request.head.repo.full_name == github.repository && toJSON(github.event.pull_request.flow) == '0'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      COMMITLINT_PACKAGE_VERSION: "1.0.8"
-      # Reserve job time for npm retries by bounding each fetch attempt.
-      npm_config_fetch_timeout: "30000"
-      npm_config_fetch_retries: "3"
-      npm_config_fetch_retry_mintimeout: "1000"
-      npm_config_fetch_retry_maxtimeout: "10000"
     steps:
       - uses: actions/checkout@v6
         with:
-          # Fetches every branch, so the lint step finds the base without a fetch.
+          # Fetches every branch, so validation finds the base without a fetch.
           fetch-depth: 0
-          # The lint step runs PR-controlled npm config, which could read a
-          # persisted token from the Git config.
+          # The validation step executes the PR's helper; do not persist its token.
           persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          # Deliberately policy-pinned: this workflow runs only a version-pinned npm package and takes no toolchain input from the PR tree — the template, not node-version-file, supplies the fleet baseline.
+          # Policy-pinned runtime for the refreshed PR metadata parser.
           node-version: "26.5.0"
-
-      - name: Cache conventional-commit-msg download
-        uses: actions/cache@v5
-        with:
-          path: ~/.npm
-          key: npm-conventional-commit-msg-${{ env.COMMITLINT_PACKAGE_VERSION }}
 
       - name: Read the current pull request
         # Reruns can replay stale metadata, so read the current pull request;
-        # the lint step still uses this run's event head.
-        # Only this step needs the job token. The lint step runs npm on the
-        # PR's checkout, so it first drops the credentials the runner exports
-        # and pins the npm registry.
+        # validation still uses this run's event head.
+        # Only this step needs the job token.
         shell: bash
         env:
           # Pass attacker-controllable event fields via env, never inline in run: (script injection).
@@ -81,9 +69,9 @@ jobs:
           mkdir -p "$pr_fields"
           printf '%s' "$pr_json" | FIELD_REF="$pr_fields/ref" FIELD_TITLE="$pr_fields/title" node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const fs=require("node:fs");const pr=JSON.parse(s);const ref=pr?.base?.ref;const title=pr?.title;if(typeof ref!=="string"||ref.length===0){process.stderr.write("pull request response has no base ref\n");process.exit(1)}if(typeof title!=="string"){process.stderr.write("pull request response has no title\n");process.exit(1)}fs.writeFileSync(process.env.FIELD_REF,ref);fs.writeFileSync(process.env.FIELD_TITLE,title)})'
 
-      - name: Validate commit messages with commitlint
-        # Validate messages that an enabled merge method can place on the
-        # target branch.
+      - name: Validate commit title and subjects
+        # Validate the messages a merge places on the target branch; the
+        # repository's merge settings decide which merge methods apply.
         shell: bash
         env:
           # Pass attacker-controllable event fields via env, never inline in run: (script injection).
@@ -93,10 +81,8 @@ jobs:
 
           # Forgejo's runner exports credentials to every step: the job token,
           # the Actions runtime and OIDC request tokens, and a cache URL whose
-          # run key authenticates to the cache proxy. npm expands ${VAR} in the
-          # PR's .npmrc, and commitlint runs a JS config from the PR's checkout,
-          # so drop them first. The PR's code still runs in this job; this only
-          # keeps them out of its environment.
+          # run key authenticates to the cache proxy. The PR's checker still
+          # executes here; keep these credentials out of its environment.
           unset GITHUB_TOKEN FORGEJO_TOKEN ACTIONS_RUNTIME_TOKEN ACTIONS_ID_TOKEN_REQUEST_TOKEN ACTIONS_CACHE_URL
 
           case "$HEAD_SHA" in
@@ -114,16 +100,26 @@ jobs:
           base_ref=$(cat "$pr_fields/ref")
 
           # Squash: the PR title becomes the target branch's subject.
-          { cat "$pr_fields/title"; printf '\n'; } \
-            | npm exec --yes --registry https://registry.npmjs.org --package=conventional-commit-msg@${COMMITLINT_PACKAGE_VERSION} -- \
-              conventional-commit-msg
+          if { cat "$pr_fields/title"; printf '\n'; } | bash scripts/check-msg.sh --title; then
+            :
+          else
+            check_status=$?
+            printf '%s\n' 'commit-msg: PR title check failed' >&2
+            exit "$check_status"
+          fi
 
           # Forgejo allows branch names that start with "-", which --branch rejects.
           git check-ref-format "refs/heads/${base_ref}"
           from=$(git rev-parse "refs/remotes/origin/${base_ref}^{commit}")
 
           # Rebase: the PR's individual commits land on the target branch.
-          npm exec --yes --registry https://registry.npmjs.org --package=conventional-commit-msg@${COMMITLINT_PACKAGE_VERSION} -- \
-            conventional-commit-msg \
-            --from "$from" \
-            --to "$HEAD_SHA"
+          git rev-list "$from..$HEAD_SHA" > "$pr_fields/commits"
+          failed=0
+          while IFS= read -r commit; do
+            git show -s --format=%B "$commit" > "$pr_fields/message"
+            if ! bash scripts/check-msg.sh < "$pr_fields/message"; then
+              printf 'commit-msg: commit check failed: %s\n' "$commit" >&2
+              failed=1
+            fi
+          done < "$pr_fields/commits"
+          exit "$failed"

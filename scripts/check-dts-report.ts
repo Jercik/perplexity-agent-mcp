@@ -1,11 +1,14 @@
 // Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-report.ts
+import path from "node:path";
+
+import { repositoryRoot } from "./check-dts-core.ts";
 import type { Finding } from "./check-dts-core.ts";
 import {
   isCoveredByAlignTable,
   nearestManifestDependencyNames,
   suggestExtension,
-  type Suggestion,
 } from "./check-dts-extensions.ts";
+import type { Suggestion } from "./check-dts-extensions.ts";
 import type { LeakingPackage, Problem } from "./check-dts-package.ts";
 
 type ProblemOfKind<Kind extends Problem["kind"]> = Extract<Problem, { kind: Kind }>;
@@ -19,6 +22,15 @@ function problemsOfKind<Kind extends Problem["kind"]>(
 
 function describeLeak(problem: { leaking: LeakingPackage; finding: Finding }): string {
   return `${problem.leaking.name}@${problem.leaking.version}: ${problem.finding.line}`;
+}
+
+function describeOrigin(problem: {
+  leaking: LeakingPackage | undefined;
+  finding: Finding;
+}): string {
+  return problem.leaking === undefined
+    ? problem.finding.line
+    : describeLeak({ ...problem, leaking: problem.leaking });
 }
 
 function isCovered(problem: ProblemOfKind<"undeclared">): boolean {
@@ -62,7 +74,7 @@ function formatHandWrittenExtensions(problems: readonly ProblemOfKind<"undeclare
 
   const lines = [
     "",
-    "Imported without being declared. Add to packageExtensions in pnpm-workspace.yaml, relock, and rerun. A placeholder range needs a human: use a range with an upper bound that the typings were written against (align rejects *, >=1 and ^1 || >=2).",
+    "Imported without being declared. Add to packageExtensions in pnpm-workspace.yaml, relock, and rerun. A <range> placeholder needs a human: use a range with an upper bound that the typings were written against (align rejects *, >=1 and ^1 || >=2).",
     ...problems.map((problem) => `  ${describeLeak(problem)}`),
     "",
     "packageExtensions:",
@@ -90,10 +102,12 @@ function distinctProblems(problems: readonly Problem[]): Problem[] {
   const distinct = new Map<string, Problem>();
   for (const problem of problems) {
     const owner =
-      problem.kind === "own-declaration"
+      problem.kind === "own-declaration" || problem.leaking === undefined
         ? "this repository"
         : `${problem.leaking.name}@${problem.leaking.version}`;
-    const key = `${owner} ${problem.finding.specifier}`;
+    // Node typings are added per project, so the same import in another project is another repair.
+    const scope = problem.kind === "node-types" ? ` ${problem.leaf}` : "";
+    const key = `${owner} ${problem.finding.specifier}${scope}`;
     if (!distinct.has(key)) {
       distinct.set(key, problem);
     }
@@ -104,7 +118,7 @@ function distinctProblems(problems: readonly Problem[]): Problem[] {
 export function formatFailure(allProblems: readonly Problem[]): string {
   const problems = distinctProblems(allProblems);
   const lines = [
-    `check:dts: ${problems.length} unresolved ${problems.length === 1 ? "import" : "imports"} in dependency typings; the imported types degrade to any.`,
+    `check:dts: ${problems.length} unresolved ${problems.length === 1 ? "import" : "imports"} in declaration files; the imported types degrade to any.`,
   ];
   const own = problemsOfKind(problems, "own-declaration");
   if (own.length > 0) {
@@ -120,6 +134,24 @@ export function formatFailure(allProblems: readonly Problem[]): string {
       "",
       "Declared by the importing package but not installed, as with an optional peer. Add the module to this repository's dependencies:",
       ...notInstalled.map((problem) => `  ${describeLeak(problem)}`),
+    );
+  }
+  const nodeTypes = problemsOfKind(problems, "node-types");
+  if (nodeTypes.length > 0) {
+    lines.push(
+      "",
+      'Node typings are not part of the program, so the Node builtins and globals these typings use degrade to any. A packageExtensions entry cannot repair it, because an ambient module is visible only to a program that includes @types/node. Add @types/node to this repository\'s devDependencies and "node" to compilerOptions.types of each project (with types ["*"] the install is enough):',
+      ...nodeTypes.map(
+        (problem) => `  ${path.relative(repositoryRoot, problem.leaf)}: ${describeOrigin(problem)}`,
+      ),
+    );
+  }
+  const libraries = problemsOfKind(problems, "unresolved-lib");
+  if (libraries.length > 0) {
+    lines.push(
+      "",
+      "Referenced by a `/// <reference lib>` directive naming a lib this TypeScript release does not ship. No dependency declaration repairs it: upgrade TypeScript to a release that ships the lib, or the package to one that no longer asks for it:",
+      ...libraries.map((problem) => `  ${describeOrigin(problem)}`),
     );
   }
   const firstParty = problemsOfKind(problems, "first-party");

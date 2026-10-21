@@ -3,17 +3,24 @@ import { existsSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import path from "node:path";
 
-import {
-  readJsonRecord,
-  repositoryRoot,
-  stringRecord,
-  type Finding,
-  type LeafReport,
-} from "./check-dts-core.ts";
+import { readJsonRecord, repositoryRoot, stringRecord } from "./check-dts-core.ts";
+import type { Finding, LeafReport } from "./check-dts-core.ts";
 
 const DEPENDENCY_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"] as const;
 // align rejects packageExtensions keys for these scopes: a first-party package is fixed at its source.
 const FIRST_PARTY_SCOPES = ["@j4k/", "@j4k-oss/"] as const;
+
+// Cannot find module, and the side-effect import form of it.
+export const MODULE_ERROR_CODES: ReadonlySet<number> = new Set([2307, 2882]);
+const LIBRARY_ERROR_CODES: ReadonlySet<number> = new Set([2726, 2727]);
+const NODE_TYPES_CODES: ReadonlySet<number> = new Set([2591, 2580]);
+
+// A side-effect import of a builtin reports TS2882 instead of TS2591.
+function isNodeTypesFinding(finding: Finding): boolean {
+  return (
+    NODE_TYPES_CODES.has(finding.code) || (finding.code === 2882 && isBuiltin(finding.specifier))
+  );
+}
 
 export function bareModuleName(specifier: string): string {
   if (specifier.startsWith("node:") || isBuiltin(specifier)) {
@@ -31,7 +38,7 @@ export interface LeakingPackage {
   firstParty: boolean;
 }
 
-export function leakingPackage(finding: Finding): LeakingPackage | undefined {
+function leakingPackage(finding: Finding): LeakingPackage | undefined {
   if (finding.file === undefined) {
     return undefined;
   }
@@ -71,6 +78,8 @@ function isInstalledFor(packageDirectory: string, moduleName: string): boolean {
 
 export type Problem =
   | { kind: "own-declaration"; leaf: string; finding: Finding }
+  | { kind: "node-types"; leaf: string; finding: Finding; leaking: LeakingPackage | undefined }
+  | { kind: "unresolved-lib"; leaf: string; finding: Finding; leaking: LeakingPackage | undefined }
   | { kind: "declared-not-installed"; leaf: string; finding: Finding; leaking: LeakingPackage }
   | { kind: "first-party"; leaf: string; finding: Finding; leaking: LeakingPackage }
   | { kind: "undeclared"; leaf: string; finding: Finding; leaking: LeakingPackage };
@@ -81,6 +90,14 @@ export type Problem =
 // for want of an extension in the package's own import.
 function classifyFinding(leaf: string, finding: Finding): Problem | undefined {
   const leaking = leakingPackage(finding);
+  // No dependency declaration repairs either: an ambient `declare module "fs"` is visible
+  // only when @types/node is in the program, and a lib ships with the compiler.
+  if (isNodeTypesFinding(finding)) {
+    return { kind: "node-types", leaf, finding, leaking };
+  }
+  if (LIBRARY_ERROR_CODES.has(finding.code)) {
+    return { kind: "unresolved-lib", leaf, finding, leaking };
+  }
   if (leaking === undefined) {
     return { kind: "own-declaration", leaf, finding };
   }
@@ -91,7 +108,7 @@ function classifyFinding(leaf: string, finding: Finding): Problem | undefined {
   if (declared && !isInstalledFor(leaking.directory, moduleName)) {
     return { kind: "declared-not-installed", leaf, finding, leaking };
   }
-  if (declared && finding.code === 2307 && finding.specifier !== moduleName) {
+  if (declared && MODULE_ERROR_CODES.has(finding.code) && finding.specifier !== moduleName) {
     return undefined;
   }
   return { kind: leaking.firstParty ? "first-party" : "undeclared", leaf, finding, leaking };

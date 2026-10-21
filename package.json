@@ -1,5 +1,5 @@
 {
-  "name": "perplexity-agent-mcp",
+  "name": "@j4k-oss/perplexity-agent-mcp",
   "version": "1.3.0",
   "description": "An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI.",
   "keywords": [
@@ -8,15 +8,15 @@
     "modelcontextprotocol",
     "perplexity"
   ],
-  "homepage": "https://github.com/Jercik/perplexity-agent-mcp#readme",
+  "homepage": "https://code.j4k.dev/j4k-oss/perplexity-agent-mcp#readme",
   "bugs": {
-    "url": "https://github.com/Jercik/perplexity-agent-mcp/issues"
+    "url": "https://code.j4k.dev/j4k-oss/perplexity-agent-mcp/issues"
   },
   "license": "MIT",
   "author": "Łukasz Jerciński",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Jercik/perplexity-agent-mcp.git"
+    "url": "https://code.j4k.dev/j4k-oss/perplexity-agent-mcp.git"
   },
   "bin": {
     "perplexity-agent-mcp": "dist/index.js"
@@ -29,37 +29,41 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "publishConfig": {
+    "registry": "https://code.j4k.dev/api/packages/j4k-oss/npm/"
+  },
   "scripts": {
-    "build": "tsc --build tsconfig.app.json --force",
+    "build": "tsc -p tsconfig.build.json",
     "check:dts": "node scripts/check-dts.ts",
-    "commit-msg": "conventional-commit-msg",
+    "clean": "rm -rf dist *.tsbuildinfo",
     "format": "oxfmt --config .oxfmtrc.json .",
     "format:check": "oxfmt --check --config .oxfmtrc.json .",
     "fta": "fta-check",
     "knip": "knip",
     "lint": "oxlint --deny-warnings --report-unused-disable-directives .",
-    "prepack": "pnpm build",
+    "prepack": "pnpm run rebuild",
     "prepare": "if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then hooks_path=$(git config --local --get-all core.hooksPath 2>/dev/null && echo .) && [ \"$hooks_path\" = \"$(echo .githooks; echo .)\" ] || git config core.hooksPath .githooks; fi",
+    "rebuild": "pnpm run clean && pnpm run build",
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b tsconfig.check.json tsconfig.test.json tsconfig.scripts.json tsconfig.app.json tsconfig.build.json --noEmit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@j4k/oxlint-config": "^2.11.0",
+    "@j4k-oss/fta-check": "^1.5.10",
+    "@j4k/oxlint-config": "^2.14.2",
+    "@j4k/semantic-release-forgejo": "^1.2.4",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^24.0.0",
     "conventional-changelog-conventionalcommits": "^9.3.1",
-    "conventional-commit-msg": "catalog:",
-    "fta-check": "^1.5.8",
     "fta-cli": "^3.0.0",
-    "knip": "^6.6.3",
+    "knip": "^6.8.0",
     "oxfmt": "^0.57.0",
-    "oxlint": "^1.72.0",
-    "oxlint-tsgolint": "^0.23.0",
+    "oxlint": "^1.86.0",
+    "oxlint-tsgolint": "^7.0.2003",
     "semantic-release": "^25.0.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.5"

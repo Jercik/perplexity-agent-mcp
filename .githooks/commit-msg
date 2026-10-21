@@ -2,10 +2,188 @@
 # Native Git hook - enable with: git config core.hooksPath .githooks
 set -euo pipefail
 
-if [[ ! -e node_modules/.bin/conventional-commit-msg ]]; then
-  printf '%s\n' 'conventional-commit-msg is not installed; run `pnpm install` (it must be a devDependency).' >&2
+bash scripts/check-msg.sh < "$1"
+
+ignored_staged_paths=(
+  ":(exclude).claude/**"
+  ":(exclude).clawpatch/**"
+  ":(exclude).codex/**"
+  ":(exclude).agents/rules/**"
+  ":(exclude).agents/*.md"
+  ":(exclude).agents/**/*.md"
+)
+
+has_staged_changes() {
+  if [[ "$#" -eq 0 ]]; then
+    git diff --cached --quiet -- . "${ignored_staged_paths[@]}" || return 0
+    return 1
+  fi
+
+  git diff --cached --quiet -- "$@" || return 0
+  return 1
+}
+
+if ! git cat-file -e :package.json 2>/dev/null; then
+  exit 0
+fi
+
+if ! has_staged_changes; then
+  exit 0
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  printf '%s\n' 'pnpm is required to run commit-msg checks.' >&2
   exit 127
 fi
 
-# The bin directly: starting pnpm to run the commit-msg script costs more than the check itself, and pnpm 11+ reinstalls first when package.json has drifted from the lockfile. The root commit-msg script exists so knip sees the bin.
-exec node_modules/.bin/conventional-commit-msg "$1"
+temporary_directory=$(cd "${TMPDIR:-/tmp}" && pwd -P)
+export TMPDIR="$temporary_directory"
+script_log=$(mktemp "$temporary_directory/pre-commit-log.XXXXXX")
+trap 'rm -f "$script_log"' EXIT
+
+cancel_checks() {
+  local exit_code="$1"
+  local process_group
+  trap '' INT TERM
+  for process_group in $(jobs -p); do
+    kill -KILL -- "-$process_group" 2>/dev/null || true
+  done
+  wait 2>/dev/null || true
+  cat "$script_log" >&2
+  exit "$exit_code"
+}
+trap 'cancel_checks 130' INT
+trap 'cancel_checks 143' TERM
+
+run_step() {
+  local label="$1"
+  shift
+  echo "==> $label" >&2
+  # A separate process group lets cancellation stop the check and its children.
+  set -m
+  "$@" > "$script_log" 2>&1 &
+  local step_pid=$!
+  set +m
+  if wait "$step_pid"; then
+    return 0
+  fi
+  cat "$script_log" >&2
+  return 1
+}
+
+run_script() {
+  run_step "$1" pnpm run "$1"
+}
+
+manifests_staged=false
+if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
+  manifests_staged=true
+fi
+
+# The declaration check runs only when a commit stages one of the inputs that
+# dts_inputs_staged tests below, to keep source-only commits fast. A
+# source-only commit that first imports an already-declared package with leaky
+# typings therefore passes here, and CI catches it. Decided before the snapshot
+# worktree is entered, where nothing is staged.
+dts_inputs_staged=false
+if has_staged_changes ':(glob)**/package.json' pnpm-lock.yaml pnpm-workspace.yaml ':(glob)**/tsconfig*.json'; then
+  dts_inputs_staged=true
+fi
+
+snapshot_tree=$(git write-tree)
+if ! git cat-file -e "$snapshot_tree:pnpm-lock.yaml" 2>/dev/null; then
+  printf '%s\n' 'commit-msg checks install from the staged pnpm-lock.yaml; stage it to commit.' >&2
+  exit 1
+fi
+snapshot_parent=()
+if git rev-parse --quiet --verify HEAD >/dev/null; then
+  snapshot_parent=(-p HEAD)
+fi
+snapshot_commit=$(git commit-tree "${snapshot_parent[@]+"${snapshot_parent[@]}"}" -m "pre-commit snapshot" "$snapshot_tree")
+git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
+
+pnpm_store_dir=$(pnpm store path)
+# Prefer the store the working tree linked from while it exists here at the same store version.
+if [[ -f node_modules/.modules.yaml ]]; then
+  installed_store_dir=$(node -e 'try { const { storeDir } = JSON.parse(require("fs").readFileSync("node_modules/.modules.yaml", "utf8")); if (typeof storeDir === "string") process.stdout.write(storeDir) } catch {}')
+  if [[ -n "$installed_store_dir" && "${installed_store_dir##*/}" == "${pnpm_store_dir##*/}" && -d "$installed_store_dir/files" ]]; then
+    pnpm_store_dir=$installed_store_dir
+  fi
+fi
+
+# Checks resolve git from the snapshot; like git entering a submodule, they keep `git -c` settings.
+for git_local_env_var in $(git rev-parse --local-env-vars); do
+  case "$git_local_env_var" in
+    GIT_CONFIG_PARAMETERS | GIT_CONFIG_COUNT) ;;
+    *) unset "$git_local_env_var" ;;
+  esac
+done
+
+unregister_store_project() {
+  if [[ -d "$pnpm_store_dir/projects" ]]; then
+    find "$pnpm_store_dir/projects" -maxdepth 1 -type l -lname "*/${1##*/}" -delete
+  fi
+}
+
+snapshot_host=$(uname -n)
+snapshot_dir=$(mktemp -d "$temporary_directory/pre-commit-snapshot.$snapshot_host.$$.XXXXXX")
+install_git_config=""
+remove_snapshot() {
+  local status=$?
+  rm -f "$script_log"
+  if [[ -n "$install_git_config" ]]; then
+    rm -f "$install_git_config"
+  fi
+  cd /
+  if ! git --git-dir="$git_common_dir" worktree remove --force "$snapshot_dir" 2>/dev/null; then
+    chmod -R u+w "$snapshot_dir" 2>/dev/null || true
+    rm -rf "$snapshot_dir" || printf 'commit-msg: could not remove %s\n' "$snapshot_dir" >&2
+  fi
+  unregister_store_project "$snapshot_dir" || printf 'commit-msg: could not unregister %s from the pnpm store\n' "$snapshot_dir" >&2
+  exit "$status"
+}
+trap remove_snapshot EXIT
+# Relative worktree paths would upgrade the repository format; post-checkout hooks must not run here.
+git --git-dir="$git_common_dir" -c worktree.useRelativePaths=false -c core.hooksPath=/dev/null worktree add --quiet --detach "$snapshot_dir" "$snapshot_commit"
+cd "$snapshot_dir"
+
+install_git_config=$(mktemp "$git_common_dir/pre-commit-install-config.XXXXXX")
+snapshot_git_dir=$(git rev-parse --absolute-git-dir)
+config_entries="$snapshot_git_dir/install-config-entries"
+config_fragment="$snapshot_git_dir/install-config-fragment"
+# Resolve includes before isolating config writes; explicit config files do not follow includes by default.
+git config --null --list --includes > "$config_entries"
+while IFS= read -r -d '' config_entry; do
+  config_key=${config_entry%%$'\n'*}
+  case "$config_key" in
+    include.path | includeif.*.path) continue ;;
+  esac
+  if [[ "$config_entry" == *$'\n'* ]]; then
+    config_value=${config_entry#*$'\n'}
+    git config --file "$install_git_config" --add "$config_key" "$config_value"
+  else
+    git config --file "$config_fragment" --add "$config_key" ""
+    sed 's/ = $//' "$config_fragment" >> "$install_git_config"
+    rm -f "$config_fragment"
+  fi
+done < "$config_entries"
+# Prepare hooks may write Git config; isolate their default target during installation only.
+run_step "install" env GIT_CONFIG="$install_git_config" pnpm install --store-dir "$pnpm_store_dir" --prefer-offline --frozen-lockfile --reporter=append-only
+if [[ "$manifests_staged" == true ]]; then
+  run_step "dedupe --check" pnpm dedupe --check --store-dir "$pnpm_store_dir" --config.confirm-modules-purge=false
+fi
+
+static_failed=0
+run_script "format:check" || static_failed=1
+run_script "knip" || static_failed=1
+run_script "typecheck" || static_failed=1
+if [[ "$dts_inputs_staged" == true ]]; then
+  run_script "check:dts" || static_failed=1
+fi
+run_script "lint" || static_failed=1
+run_script "fta" || static_failed=1
+if [[ "$static_failed" -ne 0 ]]; then
+  printf '%s\n' 'Static checks failed; tests were not started.' >&2
+  exit 1
+fi
+run_script "test"

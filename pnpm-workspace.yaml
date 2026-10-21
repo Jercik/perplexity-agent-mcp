@@ -4,8 +4,13 @@ virtualStoreType: global
 registries:
   default: https://registry.npmjs.org/
   "@j4k": https://code.j4k.dev/api/packages/j4k/npm/
+  "@j4k-oss": https://code.j4k.dev/api/packages/j4k-oss/npm/
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeExclude:
   - "@j4k/*"
-catalog:
-  conventional-commit-msg: ^1.0.8
+  - "@j4k-oss/*"
+catalog: {}
+packageExtensions:
+  semantic-release:
+    dependencies:
+      "@types/signale": ^1.4.7

@@ -24,9 +24,19 @@ if (!PERPLEXITY_API_KEY) {
   process.exit(1);
 }
 
-try {
-  await runServer();
-} catch (error) {
-  console.error("Fatal error running server:", error);
-  process.exit(1);
+async function main(): Promise<void> {
+  try {
+    await runServer();
+  } catch (error) {
+    console.error("Fatal error running server:", error);
+    process.exit(1);
+  }
 }
+
+// Called from a plain function: the repo's lint config forbids both a
+// top-level await and a top-level call to an async function.
+function start(): void {
+  void main();
+}
+
+start();

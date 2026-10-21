@@ -8,14 +8,20 @@ import {
   repositoryRoot,
   stringRecord,
 } from "./check-dts-core.ts";
-import { bareModuleName, type Problem } from "./check-dts-package.ts";
+import { MODULE_ERROR_CODES, bareModuleName } from "./check-dts-package.ts";
+import type { Problem } from "./check-dts-package.ts";
 
-export type UndeclaredProblem = Extract<Problem, { kind: "undeclared" }>;
+type UndeclaredProblem = Extract<Problem, { kind: "undeclared" }>;
 
-// The modules j4k-align's packageExtensions table already adds, by package. A leak
-// the table covers is fixed by `j4k-align --fix`; a hand edit would only be
-// replaced by it. A test compares this list with the table in align.
+/**
+ * The modules j4k-align's packageExtensions table already adds, by package. A leak
+ * the table covers is fixed by `j4k-align --fix`; a hand edit would only be
+ * replaced by it. A test in align compares this list with the table, and the
+ * `@public` tag keeps knip from reporting the export as unused.
+ * @public
+ */
 export const ALIGN_TABLE_MODULES: Readonly<Record<string, readonly string[]>> = {
+  "@ai-sdk/provider": ["@types/json-schema"],
   "@fastify/env": ["fastify"],
   "@fastify/formbody": ["fastify"],
   "@fastify/multipart": ["fastify"],
@@ -25,13 +31,28 @@ export const ALIGN_TABLE_MODULES: Readonly<Record<string, readonly string[]>> = 
   "@fastify/swagger": ["fastify"],
   "@fastify/swagger-ui": ["fastify"],
   "@fastify/websocket": ["@types/ws", "fastify"],
+  "@floating-ui/react": ["@types/react"],
+  "@floating-ui/react-dom": ["@types/react"],
+  "@headlessui/react": ["@floating-ui/react-dom", "@types/react"],
+  "@heroicons/react": ["@types/react"],
   "@react-types/shared": ["@types/react"],
+  "@storybook/react": ["@types/react", "@types/react-dom"],
+  "@tanstack/query-devtools": ["@tanstack/query-core"],
+  "@tanstack/react-query": ["@types/react"],
+  "@tanstack/react-query-devtools": ["@types/react"],
+  "@testing-library/jest-dom": ["@types/aria-query"],
   "@typescript-eslint/types": ["typescript"],
+  "fastify-plugin": ["fastify"],
+  "framer-motion": ["@types/react"],
   "lucide-react": ["@types/react"],
   mermaid: ["@iconify/types", "@types/d3-selection", "type-fest"],
+  next: ["@types/react", "@types/react-dom"],
   "react-aria": ["@types/react"],
   "react-aria-components": ["@types/react"],
+  "react-error-boundary": ["@types/react"],
   "react-stately": ["@types/react"],
+  "semantic-release": ["@types/signale"],
+  storybook: ["@storybook/react", "@types/react"],
 };
 
 const VERSION = String.raw`v?\d+(?:\.(?:\d+|x|\*)){0,2}(?:-[0-9A-Za-z.-]+)?`;
@@ -53,7 +74,7 @@ function isBoundedAbove(range: string): boolean {
 
 // A range from the leaking package's own devDependencies is the one its typings
 // were written against; `*` or a protocol spec would resolve to something else.
-export function usableRange(range: string | undefined): string | undefined {
+function usableRange(range: string | undefined): string | undefined {
   if (range === undefined || /[:/]/u.test(range) || !isBoundedAbove(range)) {
     return undefined;
   }
@@ -93,11 +114,10 @@ export function suggestExtension(
   hostNames: ReadonlySet<string>,
 ): [string, Suggestion] {
   const moduleName = bareModuleName(problem.finding.specifier);
-  // TS2307 means the module itself is absent; TS7016 and TS2688 mean its types are.
-  const candidates =
-    problem.finding.code === 2307
-      ? [moduleName, typesPackageName(moduleName)]
-      : [typesPackageName(moduleName), moduleName];
+  // TS2307 and TS2882 mean the module itself is absent; TS7016 and TS2688 mean its types are.
+  const candidates = MODULE_ERROR_CODES.has(problem.finding.code)
+    ? [moduleName, typesPackageName(moduleName)]
+    : [typesPackageName(moduleName), moduleName];
   const devDependencies = stringRecord(problem.leaking.manifest.devDependencies);
   const declared = candidates.find((candidate) => candidate in devDependencies);
   const name = declared ?? candidates[0] ?? moduleName;

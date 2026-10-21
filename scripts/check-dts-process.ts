@@ -1,5 +1,6 @@
 // Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-process.ts
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 
 import { GuardFailureError, repositoryRoot } from "./check-dts-core.ts";

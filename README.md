@@ -1,5 +1,7 @@
 ## Perplexity Agent MCP
 
+Source: https://code.j4k.dev/j4k-oss/perplexity-agent-mcp. github.com/Jercik/perplexity-agent-mcp is a read-only mirror; open issues and pull requests on the Forge.
+
 An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI. It's deliberately lean and adds very few tokens to your context. It provides two specialized tools—`lookup` for instant fact-checking of API syntax and documentation details, and `answer` for comprehensive research with actionable recommendations.
 
 ### Setup
@@ -9,6 +11,21 @@ Install the published package globally:
 ```bash
 npm install -g perplexity-agent-mcp
 ```
+
+Each release is also published as `@j4k-oss/perplexity-agent-mcp` on the `code.j4k.dev` registry, for pnpm projects that exempt the `@j4k-oss` scope from `minimumReleaseAge`. To use that copy, map the scope to its registry and exempt it in `pnpm-workspace.yaml`, then add the package:
+
+```yaml
+registries:
+  "@j4k-oss": https://code.j4k.dev/api/packages/j4k-oss/npm/
+minimumReleaseAgeExclude:
+  - "@j4k-oss/*"
+```
+
+```bash
+pnpm add -D @j4k-oss/perplexity-agent-mcp
+```
+
+Both packages install the same `perplexity-agent-mcp` command and report the MCP server name `perplexity-agent-mcp`.
 
 Then add it to your Claude config file (`~/.claude.json` or `~/.config/claude/config.json`):
 

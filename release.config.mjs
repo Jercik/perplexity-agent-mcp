@@ -5,8 +5,7 @@ const releaseConfig = {
     ["@semantic-release/commit-analyzer", { preset: "conventionalcommits" }],
     ["@semantic-release/release-notes-generator", { preset: "conventionalcommits" }],
     "@semantic-release/npm",
-    // Phantom #N refs in commit messages 404 the success-comment step and fail the run.
-    ["@semantic-release/github", { successCommentCondition: false }],
+    "@j4k/semantic-release-forgejo",
   ],
 };
 

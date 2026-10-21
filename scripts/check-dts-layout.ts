@@ -40,16 +40,16 @@ function assertNoMaskingAncestor(virtualStoreDirectory: string): void {
 }
 
 // .modules.yaml records no virtual store type, only where the store and the virtual
-// store ended up. The default classic location and a location below the store are
-// the two layouts the guard understands; any other virtualStoreDir (an override
-// under node_modules, a directory elsewhere) keeps the guard from knowing whether
-// TypeScript can see undeclared imports, so it stops instead of guessing.
+// store ended up. The guard classifies the install from those locations and stops
+// on any it cannot classify (an override under node_modules, a directory elsewhere),
+// because it then cannot know whether TypeScript sees undeclared imports.
 export function assertSupportedInstallLayout(): void {
   const modulesDirectory = path.join(repositoryRoot, "node_modules");
   const modulesFile = path.join(modulesDirectory, ".modules.yaml");
   if (!existsSync(modulesFile)) {
     throw new GuardFailureError(`${modulesFile} is missing; run pnpm install first`);
   }
+  // pnpm 12 writes .modules.yaml as JSON; any other format throws here and the guard exits 2.
   const { nodeLinker, storeDir, virtualStoreDir } = readJsonRecord(modulesFile);
   if (typeof storeDir !== "string" || typeof virtualStoreDir !== "string") {
     throw new GuardFailureError(`${modulesFile} lacks storeDir or virtualStoreDir`);

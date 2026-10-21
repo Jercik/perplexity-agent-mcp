@@ -1,0 +1,249 @@
+---
+name: Checks
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_call:
+    inputs:
+      release_gate:
+        description: Release callers set this so the gate always runs the full checks.
+        type: boolean
+        default: false
+
+# Workflow-level: this file is workflow_call-able — a monorepo release consumes
+# it as a reusable workflow, while a standalone repo renders the same file and
+# runs it on pull_request. Forgejo gates OIDC issuance on enable-openid-connect
+# (it ignores a GitHub-style `permissions:` block); at the workflow level it
+# applies to every job, and act/jobparser resolves job-level precedence when the
+# file is expanded via workflow_call, so workflow-level is the robust,
+# version-independent placement.
+enable-openid-connect: true
+
+# pnpm defaults verify-deps-before-run to "install": the first `pnpm
+# <script>` or `pnpm exec` whose deps-status check sees drift re-runs a full
+# install with lifecycle scripts enabled, silently dropping this workflow's
+# install flags — a prepare hook the hardened --ignore-scripts install skipped
+# then runs in CI. Only this spelling disables it: pnpm reads
+# pnpm_config_verify_deps_before_run raw from the environment, and the
+# npm_config_ spelling is silently ignored.
+env:
+  pnpm_config_verify_deps_before_run: "false"
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  pnpm_config_store_dir: /tmp/pnpm-store
+
+jobs:
+  # Same-tree reuse. A PR run whose head tree already passed this workflow
+  # (e.g. a commit-message amend or a rebase onto an unchanged tree) skips
+  # quality-checks, which then reports "skipped" before its services or
+  # container start. Candidates are the newest successful PR runs of this file,
+  # capped by count and age (`limit` and `cutoff` in the lookup step). A run
+  # that itself reused a pass counts too, so tree equality chains, and the age
+  # cap bounds each link, not the chain. Any lookup error falls open to a
+  # full run. Escape hatch: re-run `reuse` (its dependents re-run) or re-run
+  # all jobs; re-running only quality-checks does not bypass the lookup.
+  # Release callers (workflow_call) never reuse: the gate runs in full. Nor do
+  # fork or AGit PRs, and this guard must match quality-checks': a reuse job that
+  # ran beside a skipped quality-checks would leave a successful run, and a later
+  # PR with the same tree would reuse that run without the checks ever running.
+  reuse:
+    if: ${{ github.event_name == 'pull_request' && inputs.release_gate != true && github.event.pull_request.head.repo.full_name == github.repository && toJSON(github.event.pull_request.flow) == '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      hit: ${{ steps.lookup.outputs.hit }}
+    steps:
+      - name: Look for a passing run on the same tree
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'echo "::warning::Same-tree lookup failed; running full checks."; echo "hit=false" >> "$GITHUB_OUTPUT"; exit 0' ERR
+          # Anything but a first attempt (including a non-numeric value) is a re-run.
+          case "${RUN_ATTEMPT:-1}" in
+            1) ;;
+            *)
+              echo "re-run: full checks"
+              echo "hit=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          # The derived header is not auto-masked like github.token; register it so no log line can print it.
+          echo "::add-mask::${auth}"
+          remote="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          fetch_commit() {
+            git -c "http.$GITHUB_SERVER_URL/.extraheader=Authorization: Basic $auth" fetch -q --depth=1 --filter=tree:0 "$remote" "$1" || return
+          }
+          # Read the tree id from the commit text: peeling with `^{tree}` needs the tree object, which --filter=tree:0 omitted, and git would lazy-fetch it without the per-command auth header.
+          commit_tree() {
+            local tree
+            tree="$(git cat-file commit "$1" | sed -n '1s/^tree //p')" || return
+            [ -n "$tree" ] || return
+            printf '%s\n' "$tree"
+          }
+          git init -q
+          fetch_commit "$HEAD_SHA"
+          head_tree="$(commit_tree "$HEAD_SHA")"
+          runs="$(curl -fsS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/actions/runs?workflow_id=checks.yml&status=success&event=pull_request&event=pull_request_sync&page=1&limit=20")"
+          cutoff="$(date -u -d '30 days ago' +%s)"
+          candidates="$(printf '%s' "$runs" | jq -r --arg head "$HEAD_SHA" --argjson cutoff "$cutoff" '.workflow_runs[] | select(.commit_sha != $head) | select((try (.created | capture("^(?<t>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:[0-9]{2})$") | ((.t + "Z" | fromdateiso8601) - (if .z == "Z" then 0 else ((if .z[0:1] == "-" then -1 else 1 end) * ((.z[1:3] | tonumber) * 3600 + (.z[4:6] | tonumber) * 60)) end))) catch 0) >= $cutoff) | [.commit_sha, .html_url] | @tsv')"
+          while IFS=$'\t' read -r sha url; do
+            [ -n "$sha" ] || continue
+            if ! fetch_commit "$sha"; then
+              echo "Skipping candidate $sha: could not fetch it."
+              continue
+            fi
+            tree="$(commit_tree "$sha" 2>/dev/null)" || continue
+            if [ "$tree" = "$head_tree" ]; then
+              echo "tree $tree already passed in run $url (head $sha); skipping quality-checks"
+              echo "hit=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done <<< "$candidates"
+          echo "No passing run on tree $head_tree; running full checks."
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+
+  quality-checks:
+    needs: reuse
+    # Fork and AGit PRs skip this job, and a skip is not a pass. When a trusted
+    # user reopens one whose poster lacks Actions trust, Forgejo runs this base
+    # copy unapproved against the PR head. AGit flow 1 reuses this repo's identity;
+    # toJSON rejects a missing, null, '' or '0' flow that a bare == 0 would admit.
+    if: >-
+      ${{ !cancelled() && needs.reuse.outputs.hit != 'true' &&
+      (github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      toJSON(github.event.pull_request.flow) == '0')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: ["24.15.0", "26.5.0"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Strip untrusted project install config
+        # pull_request checks out attacker-controlled code: remove its install config, which can redirect installs or leak the registry token, and its pnpmfiles, whose hooks run even under --ignore-scripts.
+        run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Not setup-node's `cache: pnpm`: the Forgejo runner's cache server lowercases keys and setup-node compares the matched key case-sensitively, so an exact hit never counts as one there and the store is uploaded again. actions/cache compares them case-insensitively.
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Configure registry auth
+        env:
+          NPM_READ_AUDIENCE: ${{ vars.NPM_READ_AUDIENCE }}
+        run: |
+          set -eu
+          if [ -z "${NPM_READ_AUDIENCE:-}" ]; then
+            echo "::error::NPM_READ_AUDIENCE variable is not set. It is the server-generated audience for the org npm-reader integration; reconcile it from j4k-cluster."
+            exit 1
+          fi
+          # Fail with a clear message, not a raw curl error, when the OIDC request vars are absent (fork PR, or enable-openid-connect inactive).
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::No Actions OIDC token on this run (a fork PR Forgejo withholds it from, or enable-openid-connect is inactive)."
+            exit 1
+          fi
+          # Forgejo appends `&audience=` to the placeholder-terminated request URL
+          # and returns {"value": "<jwt>"}. The registry accepts the JWT as a
+          # Bearer _authToken for the integration owner. pnpm ignores env
+          # references in credentials it does not expand itself, so the token is
+          # written literally into the trusted user-level ~/.npmrc.
+          NODE_AUTH_TOKEN="$(
+            curl -fsSL \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL:-}&audience=${NPM_READ_AUDIENCE}" \
+              | sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p'
+          )"
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Failed to obtain an Actions OIDC token for the private registry install."
+            exit 1
+          fi
+          # A curl-fetched token is not auto-masked like a secrets.* value; register it so no later step can print it.
+          echo "::add-mask::${NODE_AUTH_TOKEN}"
+          echo "//code.j4k.dev/api/packages/j4k/npm/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          # Workflow-level enable-openid-connect exposes ACTIONS_ID_TOKEN_REQUEST_* to every step; blank them so no later (PR-controlled) step can mint another token.
+          printf 'ACTIONS_ID_TOKEN_REQUEST_URL=\nACTIONS_ID_TOKEN_REQUEST_TOKEN=\n' >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile
+
+      - name: Strip registry token
+        # pull_request runs PR-controlled scripts below; remove the token before any of them reads ~/.npmrc.
+        run: rm -f ~/.npmrc
+
+      - name: Check root peer dependencies
+        run: pnpm peers check --lockfile-only
+
+      - name: Run knip
+        run: pnpm run knip
+
+      - name: Run format check
+        run: pnpm run format:check
+
+      - name: Run typecheck
+        run: pnpm run typecheck
+
+      - name: Run declaration resolution check
+        run: pnpm run check:dts
+
+      - name: Run lint
+        run: pnpm run lint
+
+      - name: Run fta
+        run: pnpm run fta
+
+      - name: Run build
+        run: pnpm run build
+
+      - name: Run tests
+        run: pnpm run test
+
+      - name: Save pnpm store
+        # Last step, so it saves only after the whole job succeeded. The key comes from the restore step so install cannot change it.
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
+
+  # The fork and AGit guards in this repo's workflows read the pull_request
+  # payload's `flow`. If a Forgejo upgrade drops or renames it, every guarded
+  # job skips and the PR reads green; this job turns that into a failed check.
+  pr-flow-canary:
+    if: >-
+      github.event_name == 'pull_request' &&
+      toJSON(github.event.pull_request.flow) != '0' &&
+      toJSON(github.event.pull_request.flow) != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    env:
+      FLOW: ${{ toJSON(github.event.pull_request.flow) }}
+    steps:
+      - name: Fail on an unrecognized pull request flow
+        run: |
+          echo "::error::pull_request.flow is ${FLOW}, not 0 or 1, so the fork and AGit guards skip every guarded job on this pull request"
+          exit 1

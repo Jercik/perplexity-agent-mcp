@@ -1,0 +1,89 @@
+---
+# Rendered by j4k-align from templates/workflows/review-forgejo.yml.hbs.
+# Direct edits are drift and are overwritten on the next targeted --fix; edit the template.
+#
+# Thin caller: the review-wrapper action IS the PR's "Review" check.
+# pull_request_target executes the BASE branch's copy of this file, so a PR
+# cannot rewrite the workflow that reads the capability secret; the wrapper
+# checks out nothing and executes nothing from the PR. No fork `if:` on the PR
+# arm — Forgejo records a skipped job as green, so the wrapper takes a labeled
+# skip branch internally (real pass + explicit "fork PR — not reviewed"
+# comment). The dispatch arm is restricted to refs/heads/main, but read that
+# as hygiene, not as a boundary: Forgejo resolves a dispatch ref through
+# ExpandRef, which accepts any branch, tag, or raw commit — including commits
+# no ref points at — applies no default-branch or protected-branch policy, and
+# reads the workflow from that revision, so this condition runs only when the
+# dispatcher picked a revision containing it. Secrets are attached to the task
+# before the runner evaluates any job `if:`, so the condition gates step
+# execution, not secret distribution. What bounds the capability token is who
+# holds Actions-unit write; bounding it here needs a ref-scoped credential the
+# forge does not yet offer, so treat this arm as trusted-caller-only by
+# convention. The `if:` is an event allowlist rather than a dispatch negation
+# so a trigger added later fails closed, and it costs no check semantics: a
+# skipped dispatch run has no PR check to be green on, and a dispatch run
+# cannot flip the Review check anyway — Forgejo writes commit statuses only
+# for push and pull-request-family events. The concurrency group isolates an
+# unmodified off-main dispatch — Forgejo parses this block from the
+# dispatcher's revision too, so an edited copy can still name the pull
+# request's group, and the caveat above applies here unchanged. It is worth
+# having because Forgejo resolves the group and kills its predecessor at run
+# creation, before any job `if:`, so a dispatch destined to be skipped would
+# otherwise cancel a live pull-request review and leave the PR with none.
+# A permitted main dispatch stays in the pull request's own
+# group deliberately — a manually dispatched review should supersede any live
+# review pass for the same pull request, and the wrapper's reconcilers list
+# before they create, so two overlapping passes double-post. Keying on github.ref alone would instead split a stacked pull
+# request, whose ref is its own base branch, away from that main dispatch.
+# `edited` is required: a base-branch
+# retarget fires only `edited`. It also fires on title and body edits, so a
+# metadata-only edit cancels any live pass and reconciles the unchanged head.
+# cancel-in-progress is safe: the wrapper is a
+# stateless reconciler, and a later pass re-reads the markers a cancelled one
+# left and creates only what is missing.
+# The group embeds the dispatch input verbatim, so only the canonical integer
+# form names the pull request's group — `007` keys `review-007`, which races
+# the live `review-7` pass instead of superseding it. That distinctness is the
+# evaluator's doing, not the wrapper's: Forgejo neither trims nor normalizes
+# the resolved group, only lowercases it, so no spelling collapses onto the
+# canonical key. Canonicalizing here would stake every run on that same
+# server-side evaluator; the wrapper's input validation rejects a non-canonical
+# PR number instead, so such a run reviews nothing under the group it did key.
+# Recursion guard: every wrapper write is an issue/review comment or a
+# conversation resolution — none fires the pull_request_target family. Any
+# trigger widening must re-prove this.
+name: Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Positive pull request number without a # prefix or leading zeros (for example, 123)"
+        required: true
+        type: string
+
+concurrency:
+  group: review-${{ github.event.pull_request.number || github.event.inputs.pr_number }}${{ github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && format('-{0}', github.ref) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    # Limit runner occupancy even if retries or reconciliation are unfinished.
+    timeout-minutes: 130
+    name: Review
+    steps:
+      - name: Run review wrapper
+        uses: https://code.j4k.dev/j4k-oss/review-wrapper@65f91200423c1ab20699b156c8f5fcac67324c59
+        # Pinned origin: the wrapper withholds the capability token unless
+        # REVIEW_SERVICE_URL's own origin matches it exactly.
+        with:
+          expected-service-origin: https://review.j4k.dev
+        env:
+          REVIEW_SERVICE_URL: ${{ vars.REVIEW_SERVICE_URL }}
+          REVIEW_CAPABILITY_TOKEN: ${{ secrets.REVIEW_CAPABILITY_TOKEN }}
+          FORGEJO_TOKEN: ${{ github.token }}
