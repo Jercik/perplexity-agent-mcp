@@ -49,7 +49,7 @@ The server exposes only two tools with concise descriptions (~1.3K tokens), keep
 - **lookup**: Gets quick facts from documentation (like API syntax or config keys)
 - **answer**: Does deeper research to compare options and make recommendations
 
-Under the hood, both tools are opinionated wrappers that call Perplexity API with coding-specialized system prompts. The lookup tool uses a compact fact‑extraction prompt focused on code/docs facts (see `LOOKUP_SYSTEM_PROMPT` in `src/index.ts`). The answer tool uses a technical decision/analysis prompt tailored for migrations and architecture choices (see `ANSWER_SYSTEM_PROMPT` in `src/index.ts`). The server also selects task‑appropriate Perplexity models—`sonar-pro` for lookups (see `getLookupModel()` in `src/index.ts`) and `sonar-reasoning-pro` for deeper research (see `getAnswerModel()` in `src/index.ts`).
+Under the hood, both tools are opinionated wrappers that call Perplexity API with coding-specialized system prompts. The lookup tool uses a compact fact‑extraction prompt focused on code/docs facts (see `LOOKUP_SYSTEM_PROMPT` in `src/prompts.ts`). The answer tool uses a technical decision/analysis prompt tailored for migrations and architecture choices (see `ANSWER_SYSTEM_PROMPT` in `src/prompts.ts`). Each tool calls a fixed Perplexity model chosen for its task, and callers cannot select another. The models are set in `registerLookupTool` (`src/tools/lookup.ts`) and `registerAnswerTool` (`src/tools/answer.ts`).
 
 Example AI agent prompt that will trigger AI agent to use this MCP and give you good results:
 
@@ -59,7 +59,7 @@ Please update the "foo" dependency to the latest version. Use Perplexity for the
 
 ### Requirements
 
-- Node.js v24.0.0 or newer
+- Node.js v24.15.0 or newer
 - A Perplexity API key
 
 # Testing hooks
