@@ -1,7 +1,7 @@
 ---
 name: commit-msg
 
-# Validate the current PR title and the subjects selected for a rebase.
+# Enforce commit-message policy before merge; see the validation step below.
 
 on:
   pull_request:

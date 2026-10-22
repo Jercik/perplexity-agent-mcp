@@ -103,6 +103,8 @@ A module earns its place by what it hides behind an interface smaller than the i
 - A wrapper that only forwards calls adds surface without hiding anything; use the wrapped thing directly. An interface that hides infrastructure behind domain-shaped methods is the opposite case — that is depth.
 - In production code, one general operation serving all current callers beats several near-duplicate special-case ones.
 
+When a change adds or reshapes an interface — a new type, module, service, option, or error path — or splits, merges, wraps, or layers code, load the `module-design-tradeoffs` skill before settling the design.
+
 # Rule: Design Contracts Twice
 
 The shape that ships first is usually just the first one that worked, and some shapes are expensive to revisit once anything depends on them: a CLI surface, a stored or wire format, JSON output that automation parses, a package's public API. Before committing to such a contract, sketch a second, meaningfully different shape and compare the two on what each asks of callers: what they must know to use it correctly, and what they can get wrong silently. Prefer the shape that keeps required knowledge small while misuse stays loud — still failing a compile, a parse, or a run. Record the winner and the loser in a sentence or two where rejected alternatives already belong — the pull request description, or a one-line comment when the code alone would not explain the choice.
@@ -204,7 +206,7 @@ function handleRequest(body: unknown): User {
 
 # Rule: Test What Matters
 
-Write tests where failure is expensive and the test can stay stable: business rules, data transformations, the functional core's public contracts, and a regression test for every bug you fix, shell code included, unless the compiler would reject the bug if it came back. Beyond those regression tests, leave the imperative shell — CLI entry points, HTTP handlers, database and file I/O — untested unless tests are requested; when they are, prefer a thin set of end-to-end flows over unit tests with mocks. Write fewer for pass-through forwarding, private helpers already covered through a public caller, call-count and call-order choreography, wholesale snapshots, and any test whose assertions mirror the implementation instead of the promised behavior.
+Write tests where failure is expensive and the test can stay stable: business rules, data transformations, the functional core's public contracts, and a regression test for every bug you fix, shell code included, unless the compiler would reject the bug if it came back. Beyond those regression tests, leave the imperative shell defined in “Separate the Functional Core from the Imperative Shell” untested unless tests are requested; when they are, prefer a thin set of end-to-end flows over unit tests with mocks. Write fewer for pass-through forwarding, private helpers already covered through a public caller, call-count and call-order choreography, wholesale snapshots, and any test whose assertions mirror the implementation instead of the promised behavior.
 
 ```ts
 // BAD: asserts internal choreography, not the promised behavior
@@ -334,7 +336,9 @@ Forks of upstream projects and vendored third-party code keep upstream's convent
 
 # Rule: Use `repoq` for Repository Queries
 
-Use `repoq` for reading repository state instead of piping `git` or the forge CLI through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and, under `--json`, returns validated JSON. It also carries one write verb: `pr create` opens a pull request on the detected forge, taking the body from a file or stdin rather than an argument the shell would expand. Use raw `git` for commit/push/merge, and the repo's forge CLI for the other forge-side mutations (issues, releases, PR edits) — `gh` for GitHub or `fgj` for Forgejo, per the detected provider. Run `npx -y repoq@latest --help` if unsure of the available subcommands; the explicit tag prevents `npx` from reusing a stale cached release.
+Use `repoq` for reading repository state instead of piping `git` or the forge CLI through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and, under `--json`, returns validated JSON. It also carries one write verb: `pr create` opens a pull request on the detected forge, taking the body from a file or stdin rather than an argument the shell would expand. Use raw `git` for commit/push/merge, and the repo's forge CLI for the other forge-side mutations (issues, releases, PR edits) — `gh` for GitHub or `fgj` for Forgejo, per the detected provider.
+
+Run it as `npx -y --@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/ @j4k-oss/repoq@latest <command>`, and add `--help` if unsure of the available subcommands. It publishes only to the Forge registry as `@j4k-oss/repoq`; the unscoped `repoq` on npmjs is frozen at an old release. Keep the `--@j4k-oss:registry` flag: the `@j4k-oss` scope on npmjs is not confirmed as ours, so without the flag `npx` can fetch another owner's package from there. The `@latest` tag prevents `npx` from reusing a stale cached release.
 
 # Rule: Discriminated Unions, Not Bags of Optionals
 
@@ -362,7 +366,7 @@ Boolean mode flags are the same smell: two or more interdependent booleans model
 // BAD - creating and editing cannot both hold, and documentId means nothing outside editing
 type EditorState = { isCreating: boolean; isEditing: boolean; documentId?: string };
 
-// GOOD - three valid states, each carrying only its own data
+// GOOD
 type EditorState =
   | { mode: "closed" }
   | { mode: "creating" }
@@ -387,7 +391,7 @@ import type { User } from "./user";
 
 # Rule: Named Exports, No Barrel Files
 
-Don't use default exports. Don't use barrel files (`index.ts` that re-exports siblings). Both add indirection that breaks the link between an import and its source: default exports let importers pick arbitrary names, barrels route imports through an intermediary.
+Use named exports unless the consuming framework requires a default export. Don't use barrel files (`index.ts` that re-exports siblings). Both add indirection that breaks the link between an import and its source: default exports let importers pick arbitrary names, barrels route imports through an intermediary.
 
 Don't `export` symbols from internal modules unless they're consumed outside that module or are part of the package's public API. An `export` claims outside consumers exist — an unused one disguises dead code as API surface and makes the symbol look risky to change or delete when nothing would break.
 
@@ -412,8 +416,8 @@ const Size = {
   md: "MEDIUM",
 } as const;
 
-type SizeKey = keyof typeof Size; // "xs" | "sm" | "md"
-type SizeValue = (typeof Size)[SizeKey]; // "EXTRA_SMALL" | "SMALL" | "MEDIUM"
+type SizeKey = keyof typeof Size;
+type SizeValue = (typeof Size)[SizeKey];
 ```
 
 Numeric enums are an extra trap: they produce reverse mappings that double the number of keys, so `Object.keys()` on a 4-member numeric enum returns 8 entries.
@@ -547,12 +551,16 @@ Restart the consumer dev server.
 
 When done, replace the `file:` path with a published range — the range `package.json` carried before the swap, or the newly released version (`pnpm add @scope/package@^1.2.4`). Don't commit a `file:` dependency.
 
-# Rule: Use Explicit `include`/`exclude` in tsconfig Files
+# Rule: Define Intentional `files`/`include`/`exclude` in tsconfig Files
 
-Use explicit `include`/`exclude` patterns in environment-specific configs. Exclude test files from production; include them in test configs. A solution-style root `tsconfig.json` (`files: []` plus project references) lists no inputs of its own — the patterns belong in the leaf configs.
+Define intentional `files`, `include` and `exclude` inputs for each checking and production context. Keep test-only ambient inputs outside production. An actual checking root owns its inputs and `noEmit: true`; a retained solution-style root (`files: []` plus project references) leaves inputs to its leaf configs. Shared bases own compiler defaults, not source selection. In a layout accepted by [Align's native typed-lint validation](https://code.j4k.dev/j4k/align/src/branch/main/docs/typescript-policies.md#native-typed-lint-discovery), preserve the ordered `references` in the empty root `tsconfig.json`: the linter uses them to find the checking configs. Keep the repository's typecheck command checking those configs explicitly; a direct `tsc -p tsconfig.json` on the empty root checks no source files.
+
+For a React library accepted by [Align's prepared-library validation](https://code.j4k.dev/j4k/align/src/branch/main/docs/typescript-policies.md#prepared-react-library-checking-and-emission), keep `tsconfig.app.json` as the application checking project and retain a separate nonincremental package build. Preserve production inputs and compiler options, Storybook, and package generation, build and publication steps. Follow the linked delivery checks to verify newly built package output separately from configuration compatibility.
+
+When a production config extends a broad checking root, clear inherited checking-only `files` with `files: []` or replace them with intentional production files. Before removing a test or script checking config, compare its compiler options and diagnostics as well as file coverage. `types: ["node"]` does not isolate source-level `declare global` or module augmentation.
 
 ```json
-// tsconfig.app.json (production)
+// tsconfig.app.json (production source inputs; emission depends on the layout)
 { "include": ["src/**/*.ts"], "exclude": ["**/*.test.*", "**/*.spec.*"] }
 
 // tsconfig.test.json
@@ -561,7 +569,7 @@ Use explicit `include`/`exclude` patterns in environment-specific configs. Exclu
 
 ## Glob support
 
-TypeScript globs are limited and differ from bash/zsh globs. Only three wildcards exist: `*` (any characters except a path separator), `?` (exactly one character except a path separator), and `**/` (any directory depth). Brace groups (`{a,b}`), extended patterns (`?(x)`, `!(x)`), and character classes (`[jt]`) are not supported — braces and brackets match as literal characters, so `src/**/*.{test,spec}.ts` matches only a file literally named with those braces. The mistake is loud only as the sole `include`, where it raises TS18003; as an `exclude` entry — or beside a pattern that does match — it silently covers nothing. Use `**/*.test.*` instead of `**/*.{test,spec}.?(c|m)[jt]s?(x)`.
+TypeScript globs are limited and differ from bash/zsh globs. Only three wildcards exist: `*` (any characters except a path separator), `?` (exactly one character except a path separator), and `**/` (any directory depth). Brace groups (`{a,b}`), extended patterns (`?(x)`, `!(x)`), and character classes (`[jt]`) are not supported — braces and brackets match as literal characters, so `src/**/*.{test,spec}.ts` matches only a file literally named with those braces. The mistake is loud only as the sole `include`, where it raises TS18003; as an `exclude` entry — or beside a pattern that does match — it silently covers nothing. Use separate `**/*.test.*` and `**/*.spec.*` patterns instead of `**/*.{test,spec}.?(c|m)[jt]s?(x)`.
 
 ## Resolution priority
 

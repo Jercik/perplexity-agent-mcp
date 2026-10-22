@@ -6,13 +6,27 @@ An opinionated, coding-specialized, Model Context Protocol server that integrate
 
 ### Setup
 
-Install the published package globally:
+The package is published only as `@j4k-oss/perplexity-agent-mcp` on the `code.j4k.dev` registry. The unscoped `perplexity-agent-mcp` package on npmjs is frozen at its last version and gets no updates.
 
-```bash
-npm install -g perplexity-agent-mcp
+The `@j4k-oss` scope on npmjs is not confirmed as ours, so always map it to the `code.j4k.dev` registry. To do that once for every command, add this line to `~/.npmrc`:
+
+```ini
+@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/
 ```
 
-Each release is also published as `@j4k-oss/perplexity-agent-mcp` on the `code.j4k.dev` registry, for pnpm projects that exempt the `@j4k-oss` scope from `minimumReleaseAge`. To use that copy, map the scope to its registry and exempt it in `pnpm-workspace.yaml`, then add the package:
+The inline flag in the commands below is enough for a single `npx` run. Keep the `~/.npmrc` line for the global install: `npm update -g` and `npm outdated -g` read the registry from your configuration, so without the line they look the scoped name up on npmjs.org. Install the package globally:
+
+```bash
+npm install -g --@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/ @j4k-oss/perplexity-agent-mcp
+```
+
+If you installed the unscoped package globally, run `npm uninstall -g perplexity-agent-mcp` (or `pnpm remove -g perplexity-agent-mcp`) first: both packages provide the `perplexity-agent-mcp` command, npm refuses to overwrite it, and pnpm keeps running the old copy. To check the latest release without installing it:
+
+```bash
+npx -y --@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/ @j4k-oss/perplexity-agent-mcp@latest --version
+```
+
+In a pnpm project, map the scope to its registry and exempt it from `minimumReleaseAge` in `pnpm-workspace.yaml`, then add the package:
 
 ```yaml
 registries:
@@ -25,7 +39,7 @@ minimumReleaseAgeExclude:
 pnpm add -D @j4k-oss/perplexity-agent-mcp
 ```
 
-Both packages install the same `perplexity-agent-mcp` command and report the MCP server name `perplexity-agent-mcp`.
+The package installs the `perplexity-agent-mcp` command and reports the MCP server name `perplexity-agent-mcp`.
 
 Then add it to your Claude config file (`~/.claude.json` or `~/.config/claude/config.json`):
 
