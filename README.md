@@ -6,9 +6,9 @@ An opinionated, coding-specialized, Model Context Protocol server that integrate
 
 ### Setup
 
-The package is published only as `@j4k-oss/perplexity-agent-mcp` on the `code.j4k.dev` registry. The unscoped `perplexity-agent-mcp` package on npmjs is frozen at its last version and gets no updates.
+The package is published only as `@j4k-oss/perplexity-agent-mcp` on the `code.j4k.dev` registry. The unscoped `perplexity-agent-mcp` package on npmjs is deprecated and gets no updates.
 
-The `@j4k-oss` scope on npmjs is not confirmed as ours, so always map it to the `code.j4k.dev` registry. To do that once for every command, add this line to `~/.npmrc`:
+Always map the `@j4k-oss` scope to the `code.j4k.dev` registry: without a mapping, `npm` looks on npmjs, finds nothing, and fails with a 404. To do that once for every command, add this line to `~/.npmrc`:
 
 ```ini
 @j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/

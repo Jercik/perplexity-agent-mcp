@@ -338,7 +338,7 @@ Forks of upstream projects and vendored third-party code keep upstream's convent
 
 Use `repoq` for reading repository state instead of piping `git` or the forge CLI through `awk`/`jq`/`grep`. Each command handles edge cases (detached HEAD, unborn branches, missing auth) and, under `--json`, returns validated JSON. It also carries one write verb: `pr create` opens a pull request on the detected forge, taking the body from a file or stdin rather than an argument the shell would expand. Use raw `git` for commit/push/merge, and the repo's forge CLI for the other forge-side mutations (issues, releases, PR edits) — `gh` for GitHub or `fgj` for Forgejo, per the detected provider.
 
-Run it as `npx -y --@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/ @j4k-oss/repoq@latest <command>`, and add `--help` if unsure of the available subcommands. It publishes only to the Forge registry as `@j4k-oss/repoq`; the unscoped `repoq` on npmjs is frozen at an old release. Keep the `--@j4k-oss:registry` flag: the `@j4k-oss` scope on npmjs is not confirmed as ours, so without the flag `npx` can fetch another owner's package from there. The `@latest` tag prevents `npx` from reusing a stale cached release.
+Run it as `npx -y --@j4k-oss:registry=https://code.j4k.dev/api/packages/j4k-oss/npm/ @j4k-oss/repoq@latest <command>`, and add `--help` if unsure of the available subcommands. It publishes only to the Forge registry as `@j4k-oss/repoq`; the unscoped `repoq` on npmjs is deprecated and frozen at an old release. Keep the `--@j4k-oss:registry` flag: without it, `npx` looks on npmjs, finds nothing, and fails with a 404. The `@latest` tag prevents `npx` from reusing a stale cached release.
 
 # Rule: Discriminated Unions, Not Bags of Optionals
 
