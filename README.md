@@ -2,7 +2,7 @@
 
 Source: https://code.j4k.dev/j4k-oss/perplexity-agent-mcp. github.com/Jercik/perplexity-agent-mcp is a read-only mirror; open issues and pull requests on the Forge.
 
-An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI. It's deliberately lean and adds very few tokens to your context. It provides two specialized tools—`lookup` for instant fact-checking of API syntax and documentation details, and `answer` for comprehensive research with actionable recommendations.
+An opinionated, coding-specialized, Model Context Protocol server that integrates Perplexity AI's Sonar models into AI coding assistants like Claude Code or Codex CLI. It's deliberately lean and adds very few tokens to your context. It covers quick API fact-checks and deeper research; [How it works](#how-it-works) describes the tools.
 
 ### Setup
 
