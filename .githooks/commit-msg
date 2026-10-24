@@ -142,7 +142,8 @@ unregister_store_project() {
   fi
 }
 
-snapshot_host=$(uname -n)
+# A manual cleanup matches a retained snapshot to its log and config file by this tag.
+allocation_tag="$(uname -n).$$"
 snapshot_dir=""
 install_git_config=""
 # The watcher runs this on the values it inherited when it forked, so assign every path used here
@@ -196,15 +197,15 @@ watch_snapshot() {
 }
 # Installed before the allocations, so a failing one still removes the earlier ones.
 trap remove_snapshot EXIT
-snapshot_dir=$(mktemp -d "$temporary_directory/pre-commit-snapshot.$snapshot_host.$$.XXXXXX")
-script_log=$(mktemp "$temporary_directory/pre-commit-log.XXXXXX")
-install_git_config=$(mktemp "$git_common_dir/pre-commit-install-config.XXXXXX")
+snapshot_dir=$(mktemp -d "$temporary_directory/pre-commit-snapshot.$allocation_tag.XXXXXX")
+script_log=$(mktemp "$temporary_directory/pre-commit-log.$allocation_tag.XXXXXX")
+install_git_config=$(mktemp "$git_common_dir/pre-commit-install-config.$allocation_tag.XXXXXX")
 # Job control gives the watcher its own process group; its standard input is the pipe. The watcher
 # sees EOF only once every holder of fd 6 has exited, so close it (`6>&-`) on any command that can
 # leave a process behind, such as a check or a smudge filter's daemon.
 exec 6> >(set -m; watch_snapshot <&0 > /dev/null &)
 # Relative worktree paths would upgrade the repository format; post-checkout hooks must not run here.
-git --git-dir="$git_common_dir" -c worktree.useRelativePaths=false -c core.hooksPath=/dev/null worktree add --quiet --detach "$snapshot_dir" "$snapshot_commit" 6>&-
+run_step "snapshot checkout" git --git-dir="$git_common_dir" -c worktree.useRelativePaths=false -c core.hooksPath=/dev/null worktree add --quiet --detach "$snapshot_dir" "$snapshot_commit"
 cd "$snapshot_dir"
 
 snapshot_git_dir=$(git rev-parse --absolute-git-dir)
