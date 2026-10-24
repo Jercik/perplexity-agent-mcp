@@ -78,11 +78,12 @@ jobs:
     name: Review
     steps:
       - name: Run review wrapper
-        uses: https://code.j4k.dev/j4k-oss/review-wrapper@65f91200423c1ab20699b156c8f5fcac67324c59
+        uses: https://code.j4k.dev/j4k-oss/review-wrapper@7725fcb7d0300c467c6b0224f7d442df98756481
         # Pinned origin: the wrapper withholds the capability token unless
         # REVIEW_SERVICE_URL's own origin matches it exactly.
         with:
           expected-service-origin: https://review.j4k.dev
+          max-failed-unit-percent: "0"
         env:
           REVIEW_SERVICE_URL: ${{ vars.REVIEW_SERVICE_URL }}
           REVIEW_CAPABILITY_TOKEN: ${{ secrets.REVIEW_CAPABILITY_TOKEN }}

@@ -45,7 +45,7 @@ function formatExtensions(allProblems: readonly ProblemOfKind<"undeclared">[]): 
   if (covered.length > 0) {
     lines.push(
       "",
-      "Imported without being declared, and j4k-align's packageExtensions table adds the module. Run `j4k-align --fix-local --yes --repo OWNER/REPO --local-path /path/to/checkout` (replace OWNER/REPO and /path/to/checkout), relock, and rerun; do not hand-edit pnpm-workspace.yaml for these:",
+      "Imported without being declared, and j4k-align's packageExtensions table adds the module. Run `j4k-align --path /path/to/checkout --fix` (replace /path/to/checkout), relock, and rerun; do not hand-edit pnpm-workspace.yaml for these:",
       ...covered.map((problem) => `  ${describeLeak(problem)}`),
     );
   }

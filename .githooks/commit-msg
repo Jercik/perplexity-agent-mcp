@@ -38,22 +38,36 @@ fi
 
 temporary_directory=$(cd "${TMPDIR:-/tmp}" && pwd -P)
 export TMPDIR="$temporary_directory"
-script_log=$(mktemp "$temporary_directory/pre-commit-log.XXXXXX")
-trap 'rm -f "$script_log"' EXIT
+script_log=""
+cancel_signals=(HUP INT QUIT TERM)
 
-cancel_checks() {
-  local exit_code="$1"
+stop_checks() {
   local process_group
-  trap '' INT TERM
   for process_group in $(jobs -p); do
     kill -KILL -- "-$process_group" 2>/dev/null || true
   done
   wait 2>/dev/null || true
-  cat "$script_log" >&2
-  exit "$exit_code"
 }
-trap 'cancel_checks 130' INT
-trap 'cancel_checks 143' TERM
+
+cancel_checks() {
+  trap '' "${cancel_signals[@]}"
+  stop_checks
+  if [[ -n $script_log ]]; then
+    cat "$script_log" >&2
+  fi
+  exit "$1"
+}
+for cancel_signal in "${cancel_signals[@]}"; do
+  cancel_exit_status=$((128 + $(kill -l "$cancel_signal")))
+  trap "cancel_checks $cancel_exit_status" "$cancel_signal"
+done
+
+# The watcher reads one message per line: a PID is the process group of the running check, `-`
+# says no check is running, and `cleaned` says cleanup finished. A subshell takes the SIGPIPE
+# when the snapshot watcher is gone, so the hook carries on.
+tell_watcher() {
+  (printf '%s\n' "$1" >&6) 2>/dev/null || true
+}
 
 run_step() {
   local label="$1"
@@ -61,12 +75,15 @@ run_step() {
   echo "==> $label" >&2
   # A separate process group lets cancellation stop the check and its children.
   set -m
-  "$@" > "$script_log" 2>&1 &
+  "$@" > "$script_log" 2>&1 6>&- &
   local step_pid=$!
   set +m
+  tell_watcher "$step_pid"
   if wait "$step_pid"; then
+    tell_watcher -
     return 0
   fi
+  tell_watcher -
   cat "$script_log" >&2
   return 1
 }
@@ -126,28 +143,70 @@ unregister_store_project() {
 }
 
 snapshot_host=$(uname -n)
-snapshot_dir=$(mktemp -d "$temporary_directory/pre-commit-snapshot.$snapshot_host.$$.XXXXXX")
+snapshot_dir=""
 install_git_config=""
-remove_snapshot() {
-  local status=$?
-  rm -f "$script_log"
-  if [[ -n "$install_git_config" ]]; then
+# The watcher runs this on the values it inherited when it forked, so assign every path used here
+# before starting it. A path still empty was never allocated.
+remove_snapshot_files() {
+  if [[ -n $script_log ]]; then
+    rm -f "$script_log"
+  fi
+  if [[ -n $install_git_config ]]; then
     rm -f "$install_git_config"
   fi
   cd /
-  if ! git --git-dir="$git_common_dir" worktree remove --force "$snapshot_dir" 2>/dev/null; then
+  if [[ -z $snapshot_dir ]]; then
+    return 0
+  fi
+  # A second --force also removes the worktree an interrupted `git worktree add` left locked.
+  if ! git --git-dir="$git_common_dir" worktree remove --force --force "$snapshot_dir" 2>/dev/null; then
     chmod -R u+w "$snapshot_dir" 2>/dev/null || true
-    rm -rf "$snapshot_dir" || printf 'commit-msg: could not remove %s\n' "$snapshot_dir" >&2
+    rm -rf "${snapshot_dir:?}" || printf 'commit-msg: could not remove %s\n' "$snapshot_dir" >&2
+    # A kill during `git worktree remove` can delete the .git file first; once the directory is gone, git drops the registration.
+    git --git-dir="$git_common_dir" worktree remove --force --force "$snapshot_dir" 2>/dev/null || true
   fi
   unregister_store_project "$snapshot_dir" || printf 'commit-msg: could not unregister %s from the pnpm store\n' "$snapshot_dir" >&2
+}
+remove_snapshot() {
+  local status=$?
+  trap '' "${cancel_signals[@]}"
+  stop_checks
+  remove_snapshot_files
+  tell_watcher cleaned
   exit "$status"
 }
+# Cleans up when the hook dies without doing so itself, even by SIGKILL. The watcher runs in
+# its own process group, so a kill aimed at the hook's group misses it, and it reads a pipe that
+# closes once the hook and its remaining fd-6 holders exit.
+watch_snapshot() {
+  local message process_group=""
+  trap '' PIPE "${cancel_signals[@]}"
+  cd /
+  while IFS= read -r message; do
+    case "$message" in
+      cleaned) exit 0 ;;
+      -) process_group="" ;;
+      *) process_group=$message ;;
+    esac
+  done
+  if [[ -n "$process_group" ]]; then
+    kill -KILL -- "-$process_group" 2>/dev/null || true
+  fi
+  remove_snapshot_files
+}
+# Installed before the allocations, so a failing one still removes the earlier ones.
 trap remove_snapshot EXIT
+snapshot_dir=$(mktemp -d "$temporary_directory/pre-commit-snapshot.$snapshot_host.$$.XXXXXX")
+script_log=$(mktemp "$temporary_directory/pre-commit-log.XXXXXX")
+install_git_config=$(mktemp "$git_common_dir/pre-commit-install-config.XXXXXX")
+# Job control gives the watcher its own process group; its standard input is the pipe. The watcher
+# sees EOF only once every holder of fd 6 has exited, so close it (`6>&-`) on any command that can
+# leave a process behind, such as a check or a smudge filter's daemon.
+exec 6> >(set -m; watch_snapshot <&0 > /dev/null &)
 # Relative worktree paths would upgrade the repository format; post-checkout hooks must not run here.
-git --git-dir="$git_common_dir" -c worktree.useRelativePaths=false -c core.hooksPath=/dev/null worktree add --quiet --detach "$snapshot_dir" "$snapshot_commit"
+git --git-dir="$git_common_dir" -c worktree.useRelativePaths=false -c core.hooksPath=/dev/null worktree add --quiet --detach "$snapshot_dir" "$snapshot_commit" 6>&-
 cd "$snapshot_dir"
 
-install_git_config=$(mktemp "$git_common_dir/pre-commit-install-config.XXXXXX")
 snapshot_git_dir=$(git rev-parse --absolute-git-dir)
 config_entries="$snapshot_git_dir/install-config-entries"
 config_fragment="$snapshot_git_dir/install-config-fragment"
