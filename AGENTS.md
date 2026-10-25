@@ -1,6 +1,6 @@
 # Rule: Read the Startup Files First
 
-Before taking any action, read @README.md.
+Read @README.md before taking any action.
 
 # Rule: Execute Commands from Arrays, Not Strings
 
