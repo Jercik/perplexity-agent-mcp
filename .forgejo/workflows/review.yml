@@ -78,7 +78,7 @@ jobs:
     name: Review
     steps:
       - name: Run review wrapper
-        uses: https://code.j4k.dev/j4k-oss/review-wrapper@f184dd51da699a21c73470658fcbd1adbfcbd708
+        uses: https://code.j4k.dev/j4k-oss/review-wrapper@081e3ea48ae887af8300204be961cb527dbd435d
         # Pinned origin: the wrapper withholds the capability token unless
         # REVIEW_SERVICE_URL's own origin matches it exactly.
         with:
