@@ -1,8 +1,9 @@
 ---
 name: Release
 
-# Required PR status checks are intentionally disabled, so release reruns the
-# managed quality suite on the merged revision before publishing.
+# Required PR status checks are intentionally disabled, so the release gate verifies
+# the merged revision before publishing: it runs the managed quality suite, or reuses
+# a pull request pass on the same tree (docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md).
 
 on:
   push:
@@ -30,8 +31,11 @@ enable-openid-connect: true
 # npm_config_ spelling is silently ignored.
 env:
   pnpm_config_verify_deps_before_run: "false"
-  # An in-tree store would put node_modules above the global virtual store's package
-  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  # Keep the store out of the workspace: an in-tree store would put node_modules above the
+  # global virtual store's package files and mask dependency-declaration leaks from TypeScript.
+  # Forge jobs also skip pnpm/action-setup when the job image already has the pinned pnpm, and
+  # the pnpm cache version includes the store path, so naming it keeps the skipped and the
+  # installing runs on one cache entry.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
@@ -79,12 +83,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require the quality-check verdict
+        # checks.yml's qc-result fails the gate unless verified, so an empty verdict means this workflow and checks.yml are out of step. Fail instead of skipping, which would show green.
+        env:
+          VERIFIED: ${{ needs.quality-checks.outputs.verified }}
+        run: |
+          if [ "$VERIFIED" != true ]; then
+            echo "::error::checks.yml returned no quality-check verdict (verified='${VERIFIED}'); release.yml and checks.yml are out of step, so run j4k-align --fix"
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      # Skip pnpm/action-setup's download when the job image already has the exact pnpm version packageManager names; otherwise the action installs it.
+      - name: Check for baked pnpm
+        id: baked-pnpm
+        run: |
+          set -eu
+          probe="$(mktemp -d "$RUNNER_TEMP/baked-pnpm.XXXXXX")"
+          trap '[ -z "$probe" ] || rm -rf "$probe"' EXIT
+          printf '{"private":true}\n' > "$probe/package.json"
+          baked="$(cd "$probe" && pnpm --version 2>/dev/null)" || baked=""
+          pin="$(node -p 'const pin = JSON.parse(require("node:fs").readFileSync("./package.json", "utf8")).packageManager; typeof pin === "string" ? pin : ""' 2>/dev/null)" || pin=""
+          if [ -n "$baked" ] && [ "$pin" = "pnpm@$baked" ]; then
+            echo "pnpm $baked in the image matches packageManager; skipping pnpm/action-setup."
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$baked" ]; then
+            echo "pnpm $baked in the image does not match packageManager; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No pnpm in the image; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup pnpm
+        if: steps.baked-pnpm.outputs.match != 'true'
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js

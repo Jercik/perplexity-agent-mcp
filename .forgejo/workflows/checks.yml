@@ -7,9 +7,13 @@ on:
   workflow_call:
     inputs:
       release_gate:
-        description: Release callers set this so the gate always runs the full checks.
+        description: Release callers set this so the gate looks for a pull request pass on the same tree.
         type: boolean
         default: false
+    outputs:
+      verified:
+        description: "'true' when the release gate verified the quality checks."
+        value: ${{ jobs.qc-result.outputs.verified }}
 
 # Workflow-level: this file is workflow_call-able — a monorepo release consumes
 # it as a reusable workflow, while a standalone repo renders the same file and
@@ -31,34 +35,35 @@ env:
   pnpm_config_verify_deps_before_run: "false"
   # An in-tree store would put node_modules above the global virtual store's package
   # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  # Forge jobs skip pnpm/action-setup when the job image already has the pinned pnpm, and
+  # the pnpm cache version includes the store path. Naming the path keeps the skipped and
+  # the installing runs on one cache entry instead of leaving it to whatever the install
+  # path left in the environment.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
-  # Same-tree reuse. A PR run whose head tree already passed this workflow
-  # (e.g. a commit-message amend or a rebase onto an unchanged tree) skips
-  # quality-checks, which then reports "skipped" before its services or
-  # container start. Candidates are the newest successful PR runs of this file,
-  # capped by count and age (`limit` and `cutoff` in the lookup step). A run
-  # that itself reused a pass counts too, so tree equality chains, and the age
-  # cap bounds each link, not the chain. Any lookup error falls open to a
-  # full run. Escape hatch: re-run `reuse` (its dependents re-run) or re-run
-  # all jobs; re-running only quality-checks does not bypass the lookup.
-  # Release callers (workflow_call) never reuse: the gate runs in full. Nor do
-  # fork or AGit PRs, and this guard must match quality-checks': a reuse job that
-  # ran beside a skipped quality-checks would leave a successful run, and a later
-  # PR with the same tree would reuse that run without the checks ever running.
+  # Release-gate reuse. When the merged tree already passed this workflow on a
+  # pull request, the release gate skips quality-checks. Only release callers
+  # (workflow_call with release_gate) look; pull requests always run the full
+  # checks. A candidate is a successful pull request run of this file created
+  # within the last 24 hours (`limit` and `cutoff` in the lookup step) whose
+  # quality-checks jobs actually ran and all succeeded; a run that skipped them
+  # is green but proves nothing.
+  # Any lookup problem falls open to a full run; the step comments below say how.
   reuse:
-    if: ${{ github.event_name == 'pull_request' && inputs.release_gate != true && github.event.pull_request.head.repo.full_name == github.repository && toJSON(github.event.pull_request.flow) == '0' }}
+    if: ${{ inputs.release_gate == true }}
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     outputs:
       hit: ${{ steps.lookup.outputs.hit }}
     steps:
-      - name: Look for a passing run on the same tree
+      - name: Look for a passing pull request run on the same tree
         id: lookup
+        # A failed reuse job fails the release gate even though quality-checks would run, so no failure here may escape.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.sha }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         shell: bash
         run: |
@@ -73,12 +78,15 @@ jobs:
               exit 0
               ;;
           esac
+          # The candidate loop stops at this deadline; each network call below is bounded to 20 seconds.
+          deadline=$((SECONDS + 60))
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           # The derived header is not auto-masked like github.token; register it so no log line can print it.
           echo "::add-mask::${auth}"
           remote="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          api="$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/actions"
           fetch_commit() {
-            git -c "http.$GITHUB_SERVER_URL/.extraheader=Authorization: Basic $auth" fetch -q --depth=1 --filter=tree:0 "$remote" "$1" || return
+            timeout 20 git -c "http.$GITHUB_SERVER_URL/.extraheader=Authorization: Basic $auth" fetch -q --depth=1 --filter=tree:0 "$remote" "$1" || return
           }
           # Read the tree id from the commit text: peeling with `^{tree}` needs the tree object, which --filter=tree:0 omitted, and git would lazy-fetch it without the per-command auth header.
           commit_tree() {
@@ -87,24 +95,48 @@ jobs:
             [ -n "$tree" ] || return
             printf '%s\n' "$tree"
           }
+          # True when the run has quality-checks jobs and every one of them succeeded. A skipped one (a fork or AGit pull request) is not a pass.
+          qc_executed() {
+            curl -fsS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" "$api/runs/$1/jobs" | jq -e '[.[] | select(.name | startswith("quality-checks"))] | length > 0 and all(.status == "success")' > /dev/null
+          }
           git init -q
           fetch_commit "$HEAD_SHA"
           head_tree="$(commit_tree "$HEAD_SHA")"
-          runs="$(curl -fsS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" "$GITHUB_SERVER_URL/api/v1/repos/$GITHUB_REPOSITORY/actions/runs?workflow_id=checks.yml&status=success&event=pull_request&event=pull_request_sync&page=1&limit=20")"
-          cutoff="$(date -u -d '30 days ago' +%s)"
-          candidates="$(printf '%s' "$runs" | jq -r --arg head "$HEAD_SHA" --argjson cutoff "$cutoff" '.workflow_runs[] | select(.commit_sha != $head) | select((try (.created | capture("^(?<t>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:[0-9]{2})$") | ((.t + "Z" | fromdateiso8601) - (if .z == "Z" then 0 else ((if .z[0:1] == "-" then -1 else 1 end) * ((.z[1:3] | tonumber) * 3600 + (.z[4:6] | tonumber) * 60)) end))) catch 0) >= $cutoff) | [.commit_sha, .html_url] | @tsv')"
-          while IFS=$'\t' read -r sha url; do
+          runs="$(curl -fsS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" "$api/runs?workflow_id=checks.yml&status=success&event=pull_request&event=pull_request_sync&page=1&limit=20")"
+          cutoff="$(date -u -d '24 hours ago' +%s)"
+          # jq's fromdateiso8601 accepts only YYYY-MM-DDTHH:MM:SSZ, but `created` carries fractional seconds or a numeric offset, so apply the offset by hand. A timestamp that does not parse counts as epoch 0, older than the cutoff: such a candidate is dropped.
+          candidates="$(printf '%s' "$runs" | jq -r --argjson cutoff "$cutoff" '
+            def epoch:
+              try (
+                capture("^(?<t>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:[0-9]{2})$")
+                | (.t + "Z" | fromdateiso8601)
+                  - (if .z == "Z" then 0
+                     else (if .z[0:1] == "-" then -1 else 1 end)
+                          * ((.z[1:3] | tonumber) * 3600 + (.z[4:6] | tonumber) * 60)
+                     end)
+              ) catch 0;
+            .workflow_runs[]
+            | select((.created | epoch) >= $cutoff)
+            | [.id, .commit_sha, .html_url]
+            | @tsv')"
+          while IFS=$'\t' read -r id sha url; do
             [ -n "$sha" ] || continue
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Lookup time budget spent; running full checks."
+              break
+            fi
             if ! fetch_commit "$sha"; then
               echo "Skipping candidate $sha: could not fetch it."
               continue
             fi
             tree="$(commit_tree "$sha" 2>/dev/null)" || continue
-            if [ "$tree" = "$head_tree" ]; then
+            [ "$tree" = "$head_tree" ] || continue
+            if qc_executed "$id"; then
               echo "tree $tree already passed in run $url (head $sha); skipping quality-checks"
               echo "hit=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
+            echo "Skipping candidate $url: its quality-checks did not all run and pass."
           done <<< "$candidates"
           echo "No passing run on tree $head_tree; running full checks."
           echo "hit=false" >> "$GITHUB_OUTPUT"
@@ -133,7 +165,29 @@ jobs:
         # pull_request checks out attacker-controlled code: remove its install config, which can redirect installs or leak the registry token, and its pnpmfiles, whose hooks run even under --ignore-scripts.
         run: rm -f .npmrc .pnpmfile.cjs .pnpmfile.mjs
 
+      # Skip pnpm/action-setup's download when the job image already has the exact pnpm version packageManager names; otherwise the action installs it.
+      - name: Check for baked pnpm
+        id: baked-pnpm
+        run: |
+          set -eu
+          probe="$(mktemp -d "$RUNNER_TEMP/baked-pnpm.XXXXXX")"
+          trap '[ -z "$probe" ] || rm -rf "$probe"' EXIT
+          printf '{"private":true}\n' > "$probe/package.json"
+          baked="$(cd "$probe" && pnpm --version 2>/dev/null)" || baked=""
+          pin="$(node -p 'const pin = JSON.parse(require("node:fs").readFileSync("./package.json", "utf8")).packageManager; typeof pin === "string" ? pin : ""' 2>/dev/null)" || pin=""
+          if [ -n "$baked" ] && [ "$pin" = "pnpm@$baked" ]; then
+            echo "pnpm $baked in the image matches packageManager; skipping pnpm/action-setup."
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$baked" ]; then
+            echo "pnpm $baked in the image does not match packageManager; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No pnpm in the image; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup pnpm
+        if: steps.baked-pnpm.outputs.match != 'true'
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
@@ -223,8 +277,8 @@ jobs:
         run: pnpm run test
 
       - name: Save pnpm store
-        # Last step, so it saves only after the whole job succeeded. The key comes from the restore step so install cannot change it.
-        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        # Last step, so it saves only after the whole job succeeded. The key comes from the restore step so install cannot change it. Pull requests only restore, so a miss never adds an upload to a PR's critical path; every other event saves.
+        if: github.event_name != 'pull_request' && steps.pnpm-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
@@ -247,3 +301,34 @@ jobs:
         run: |
           echo "::error::pull_request.flow is ${FLOW}, not 0 or 1, so the fork and AGit guards skip every guarded job on this pull request"
           exit 1
+
+  # The release gate's verdict. A workflow_call job reads success when its inner
+  # jobs are success or skipped, so a skipped quality-checks alone would let the
+  # release proceed. This job always runs on a release gate and fails unless the
+  # checks were verified: a reuse hit, or a successful quality-checks. Release
+  # callers also require its `verified` output, so no run publishes without a verdict.
+  qc-result:
+    if: ${{ always() && inputs.release_gate == true }}
+    needs: [reuse, quality-checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      verified: ${{ steps.verdict.outputs.verified }}
+    steps:
+      - name: Require verified quality checks
+        id: verdict
+        env:
+          REUSE_RESULT: ${{ needs.reuse.result }}
+          REUSE_HIT: ${{ needs.reuse.outputs.hit }}
+          QC_RESULT: ${{ needs.quality-checks.result }}
+        run: |
+          if [ "$REUSE_RESULT" = success ] && [ "$REUSE_HIT" = true ]; then
+            echo "verified by a passing pull request run on the same tree"
+          elif [ "$QC_RESULT" = success ]; then
+            echo "verified by quality-checks"
+          else
+            echo "::error::quality checks were not verified (reuse: ${REUSE_RESULT}, hit: ${REUSE_HIT:-none}, quality-checks: ${QC_RESULT})"
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "verified=true" >> "$GITHUB_OUTPUT"
