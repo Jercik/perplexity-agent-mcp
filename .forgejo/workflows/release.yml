@@ -3,7 +3,7 @@ name: Release
 
 # Required PR status checks are intentionally disabled, so the release gate verifies
 # the merged revision before publishing: it runs the managed quality suite, or reuses
-# a pull request pass on the same tree (docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md).
+# a pull request pass on the same tree (https://code.j4k.dev/j4k/align/src/branch/main/docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md).
 
 on:
   push:
@@ -31,11 +31,11 @@ enable-openid-connect: true
 # npm_config_ spelling is silently ignored.
 env:
   pnpm_config_verify_deps_before_run: "false"
-  # Keep the store out of the workspace: an in-tree store would put node_modules above the
-  # global virtual store's package files and mask dependency-declaration leaks from TypeScript.
-  # Forge jobs also skip pnpm/action-setup when the job image already has the pinned pnpm, and
-  # the pnpm cache version includes the store path, so naming it keeps the skipped and the
-  # installing runs on one cache entry.
+  # An in-tree store would put node_modules above the global virtual store's package
+  # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
+  # Forge jobs skip pnpm/action-setup when the job image already has the pinned pnpm, and
+  # the pnpm cache version includes the store path. Setting the store directory explicitly
+  # gives the skipped and the installing runs the same path, so they share one cache entry.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
@@ -209,7 +209,8 @@ jobs:
           # line. This credential reads the entire private @j4k registry; it is
           # masked, and the request vars are blanked below so no later step can
           # re-mint — but the token itself stays in ~/.npmrc through the publish
-          # (ADR-0009 accepted risk; the install runs --ignore-scripts).
+          # (accepted risk, the install runs --ignore-scripts; see
+          # https://code.j4k.dev/j4k/cluster/src/branch/main/docs/adr/0009-public-forge-npm-publish-auth.md).
           NODE_AUTH_READ_TOKEN="$(
             curl -fsSL \
               -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \

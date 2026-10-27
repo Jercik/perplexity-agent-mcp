@@ -7,7 +7,7 @@ on:
   workflow_call:
     inputs:
       release_gate:
-        description: Release callers set this so the gate looks for a pull request pass on the same tree.
+        description: Release callers set this so the gate reuses a pull request pass on the same tree when one exists, and otherwise runs the quality checks.
         type: boolean
         default: false
     outputs:
@@ -36,19 +36,19 @@ env:
   # An in-tree store would put node_modules above the global virtual store's package
   # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
   # Forge jobs skip pnpm/action-setup when the job image already has the pinned pnpm, and
-  # the pnpm cache version includes the store path. Naming the path keeps the skipped and
-  # the installing runs on one cache entry instead of leaving it to whatever the install
-  # path left in the environment.
+  # the pnpm cache version includes the store path. Setting the store directory explicitly
+  # gives the skipped and the installing runs the same path, so they share one cache entry.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
   # Release-gate reuse. When the merged tree already passed this workflow on a
   # pull request, the release gate skips quality-checks. Only release callers
-  # (workflow_call with release_gate) look; pull requests always run the full
-  # checks. A candidate is a successful pull request run of this file created
-  # within the last 24 hours (`limit` and `cutoff` in the lookup step) whose
-  # quality-checks jobs actually ran and all succeeded; a run that skipped them
-  # is green but proves nothing.
+  # (workflow_call with release_gate) look; a pull request never reuses a pass.
+  # Same-repository pull requests run quality-checks in full, and fork and AGit
+  # pull requests skip it. A candidate is a successful pull request run of this
+  # file among the newest `limit` and no older than `cutoff` (both in the lookup
+  # step) whose quality-checks jobs actually ran and all succeeded; a run that
+  # skipped them is green but proves nothing.
   # Any lookup problem falls open to a full run; the step comments below say how.
   reuse:
     if: ${{ inputs.release_gate == true }}
@@ -103,6 +103,8 @@ jobs:
           fetch_commit "$HEAD_SHA"
           head_tree="$(commit_tree "$HEAD_SHA")"
           runs="$(curl -fsS --max-time 20 -H "Authorization: Bearer $GH_TOKEN" "$api/runs?workflow_id=checks.yml&status=success&event=pull_request&event=pull_request_sync&page=1&limit=20")"
+          # The window bounds how stale a reused pass can be. Why 24 hours:
+          # https://code.j4k.dev/j4k/align/src/branch/main/docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md
           cutoff="$(date -u -d '24 hours ago' +%s)"
           # jq's fromdateiso8601 accepts only YYYY-MM-DDTHH:MM:SSZ, but `created` carries fractional seconds or a numeric offset, so apply the offset by hand. A timestamp that does not parse counts as epoch 0, older than the cutoff: such a candidate is dropped.
           candidates="$(printf '%s' "$runs" | jq -r --argjson cutoff "$cutoff" '

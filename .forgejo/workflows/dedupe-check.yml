@@ -29,9 +29,8 @@ env:
   # An in-tree store would put node_modules above the global virtual store's package
   # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
   # Forge jobs skip pnpm/action-setup when the job image already has the pinned pnpm, and
-  # the pnpm cache version includes the store path. Naming the path keeps the skipped and
-  # the installing runs on one cache entry instead of leaving it to whatever the install
-  # path left in the environment.
+  # the pnpm cache version includes the store path. Setting the store directory explicitly
+  # gives the skipped and the installing runs the same path, so they share one cache entry.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:

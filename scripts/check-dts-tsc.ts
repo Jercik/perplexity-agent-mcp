@@ -9,7 +9,7 @@ import type { ProcessResult } from "./check-dts-process.ts";
 
 // Codes that mean an import or reference in a declaration file did not resolve.
 // Which codes count, and why the neighbouring ones do not, is decision 10 of
-// align's ADR 0005.
+// https://code.j4k.dev/j4k/align/src/branch/main/docs/adr/0005-declaration-resolution-guard-and-out-of-tree-ci-store.md
 const RESOLUTION_ERROR_CODES: ReadonlySet<number> = new Set([
   2307, 2882, 7016, 2688, 2726, 2727, 2591, 2580,
 ]);
