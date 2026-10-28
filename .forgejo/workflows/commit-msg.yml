@@ -94,7 +94,7 @@ jobs:
           pr_fields="${RUNNER_TEMP}/commit-msg-pr"
           base_ref=$(cat "$pr_fields/ref")
 
-          # Keep the bare-title check: the suffix could hide an empty subject.
+          # Keep the bare-title check: the suffix would make an invalid title such as `feat:` pass.
           if { cat "$pr_fields/title"; printf '\n'; } | bash scripts/check-msg.sh --title; then
             :
           else

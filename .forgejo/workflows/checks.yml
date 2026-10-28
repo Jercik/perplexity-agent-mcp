@@ -44,11 +44,10 @@ jobs:
   # Release-gate reuse. When the merged tree already passed this workflow on a
   # pull request, the release gate skips quality-checks. Only release callers
   # (workflow_call with release_gate) look; a pull request never reuses a pass.
-  # Same-repository pull requests run quality-checks in full, and fork and AGit
-  # pull requests skip it. A candidate is a successful pull request run of this
-  # file among the newest `limit` and no older than `cutoff` (both in the lookup
-  # step) whose quality-checks jobs actually ran and all succeeded; a run that
-  # skipped them is green but proves nothing.
+  # A candidate is a successful pull request run of this file among the newest
+  # `limit` and no older than `cutoff` (both in the lookup step) whose
+  # quality-checks jobs actually ran and all succeeded; a run that skipped them
+  # is green but proves nothing.
   # Any lookup problem falls open to a full run; the step comments below say how.
   reuse:
     if: ${{ inputs.release_gate == true }}

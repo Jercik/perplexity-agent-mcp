@@ -15,8 +15,9 @@ const RESOLUTION_ERROR_CODES: ReadonlySet<number> = new Set([
 ]);
 const DIAGNOSTIC_LINE = /^(?:(?<file>.+?)\(\d+,\d+\): )?error TS(?<code>\d+): (?<message>.*)$/u;
 const INSIDE_NODE_MODULES = /(?:^|\/)node_modules\//u;
-// Typecheck runs with skipLibCheck, so the repository's own declaration files
-// (Next's next-env.d.ts importing generated .next/types) are never held to this standard.
+// The project's typecheck skips the repository's own declaration files (it sets
+// skipLibCheck), so a type error in one does not invalidate this run; an
+// unresolved bare import there is still a finding.
 const OWN_DECLARATION_FILE = /\.d\.[cm]?ts$/u;
 
 function parseDiagnostics(output: string): Diagnostic[] {
