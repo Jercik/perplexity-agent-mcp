@@ -70,6 +70,7 @@ jobs:
         env:
           # Pass attacker-controllable event fields via env, never inline in run: (script injection).
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
 
@@ -93,12 +94,21 @@ jobs:
           pr_fields="${RUNNER_TEMP}/commit-msg-pr"
           base_ref=$(cat "$pr_fields/ref")
 
-          # Squash: the PR title becomes the target branch's subject.
+          # Keep the bare-title check: the suffix could hide an empty subject.
           if { cat "$pr_fields/title"; printf '\n'; } | bash scripts/check-msg.sh --title; then
             :
           else
             check_status=$?
             printf '%s\n' 'commit-msg: PR title check failed' >&2
+            exit "$check_status"
+          fi
+
+          # Forgejo's default squash subject appends the pull request number.
+          if { cat "$pr_fields/title"; printf ' (#%s)\n' "$PR_NUMBER"; } | bash scripts/check-msg.sh --title; then
+            :
+          else
+            check_status=$?
+            printf '%s\n' 'commit-msg: default squash subject check failed' >&2
             exit "$check_status"
           fi
 
