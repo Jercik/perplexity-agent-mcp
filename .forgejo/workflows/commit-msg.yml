@@ -14,8 +14,8 @@ jobs:
     # When a trusted user edits or reopens a fork or AGit PR whose poster lacks
     # Actions trust, Forgejo runs this base copy without approval. The job checks
     # out that PR's head and executes its checker, so the PR's code would run
-    # on a root runner. Fork and
-    # AGit PRs therefore skip this check, and a skip is not a pass.
+    # on a root runner. Fork and AGit PRs therefore skip this check. Forgejo
+    # counts the skip as a pass, so same-repo-pr below fails them instead.
     # Forgejo treats an AGit PR as a fork: its poster's own events run the head
     # copy, where this guard could be deleted, only after approval.
     # head.repo.fork is unreliable; AGit reuses repo identity without push access.
@@ -94,23 +94,22 @@ jobs:
           pr_fields="${RUNNER_TEMP}/commit-msg-pr"
           base_ref=$(cat "$pr_fields/ref")
 
-          # Keep the bare-title check: the suffix would make an invalid title such as `feat:` pass.
-          if { cat "$pr_fields/title"; printf '\n'; } | bash scripts/check-msg.sh --title; then
-            :
-          else
-            check_status=$?
-            printf '%s\n' 'commit-msg: PR title check failed' >&2
-            exit "$check_status"
-          fi
+          # Squash: the PR title becomes the target branch's subject.
+          check_title() {
+            local check_status
+            if { cat "$pr_fields/title"; printf '%s\n' "$1"; } | bash scripts/check-msg.sh --title; then
+              return 0
+            else
+              check_status=$?
+              printf 'commit-msg: %s\n' "$2" >&2
+              exit "$check_status"
+            fi
+          }
 
-          # Forgejo's default squash subject appends the pull request number.
-          if { cat "$pr_fields/title"; printf ' (#%s)\n' "$PR_NUMBER"; } | bash scripts/check-msg.sh --title; then
-            :
-          else
-            check_status=$?
-            printf '%s\n' 'commit-msg: default squash subject check failed' >&2
-            exit "$check_status"
-          fi
+          # Forgejo's default squash subject appends the pull request number, and the suffix would
+          # make an invalid title such as `feat:` pass; check the bare title as well.
+          check_title "" 'PR title check failed'
+          check_title " (#${PR_NUMBER})" 'default squash subject check failed'
 
           # Forgejo allows branch names that start with "-", which --branch rejects.
           git check-ref-format "refs/heads/${base_ref}"
@@ -127,3 +126,25 @@ jobs:
             fi
           done < "$pr_fields/commits"
           exit "$failed"
+
+  # Every guarded job skips fork and AGit PRs, and Forgejo counts a skipped job
+  # as passing, so such a PR would read green with no CI. This job's condition is
+  # the guard's exact complement: it fails those PRs and runs none of their code.
+  # It also fails every PR if Forgejo stops sending a usable `flow`.
+  same-repo-pr:
+    if: github.event.pull_request.head.repo.full_name != github.repository || toJSON(github.event.pull_request.flow) != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    env:
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      FLOW: ${{ toJSON(github.event.pull_request.flow) }}
+    steps:
+      - name: Refuse a fork or AGit pull request
+        run: |
+          # An AGit pull request also reports this repository as its head, with flow 1.
+          if [ "${HEAD_REPO}" = "${GITHUB_REPOSITORY}" ] && [ "${FLOW}" != "1" ]; then
+            echo "::error::head repository ${HEAD_REPO}, flow ${FLOW}: this pull request comes from this repository, so Forgejo sent no usable flow and every guarded check was skipped. A maintainer must investigate the Forgejo upgrade or roll it back."
+          else
+            echo "::error::head repository ${HEAD_REPO}, flow ${FLOW}: fork and AGit pull requests skip every guarded check here. Close this pull request, push the branch to this repository, and open a new pull request from it."
+          fi
+          exit 1

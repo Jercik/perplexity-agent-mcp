@@ -35,7 +35,8 @@ env:
 
 jobs:
   dedupe-check:
-    # Fork and AGit PRs skip this job, and a skip is not a pass. When a trusted
+    # Fork and AGit PRs skip this job, and Forgejo counts the skip as a pass;
+    # commit-msg.yml's same-repo-pr job fails them instead. When a trusted
     # user reopens one whose poster lacks Actions trust, Forgejo runs this base
     # copy unapproved against the PR head. AGit flow 1 reuses this repo's identity;
     # toJSON rejects a missing, null, '' or '0' flow that a bare == 0 would admit.

@@ -57,7 +57,7 @@
     "@j4k/oxlint-config": "^2.14.2",
     "@j4k/semantic-release-forgejo": "^1.2.4",
     "@total-typescript/ts-reset": "^0.6.1",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.0.0",
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "fta-cli": "^3.0.0",
     "knip": "^6.8.0",
@@ -69,7 +69,7 @@
     "vitest": "^4.1.5"
   },
   "engines": {
-    "node": ">=24.15.0"
+    "node": ">=26.0.0"
   },
   "packageManager": "pnpm@12.11.2",
   "j4k": {

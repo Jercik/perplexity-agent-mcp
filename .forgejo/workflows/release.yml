@@ -79,7 +79,9 @@ jobs:
 
   release:
     name: Release
-    needs: quality-checks
+    needs: [check-tip, quality-checks]
+    # A superseded run skips quality-checks, whose call still reports success with no verdict.
+    if: needs.check-tip.outputs.is-tip == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
