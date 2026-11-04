@@ -12,13 +12,14 @@ on:
 jobs:
   commitlint:
     # When a trusted user edits or reopens a fork or AGit PR whose poster lacks
-    # Actions trust, Forgejo runs this base copy without approval. The job checks
-    # out that PR's head and executes its checker, so the PR's code would run
-    # on a root runner. Fork and AGit PRs therefore skip this check. Forgejo
-    # counts the skip as a pass, so same-repo-pr below fails them instead.
-    # Forgejo treats an AGit PR as a fork: its poster's own events run the head
-    # copy, where this guard could be deleted, only after approval.
-    # head.repo.fork is unreliable; AGit reuses repo identity without push access.
+    # Actions trust, Forgejo runs this base copy without approval.
+    # The job checks out that PR's head and executes its checker, so the PR's code
+    # would run on a root runner. Fork and AGit PRs therefore skip this check.
+    # Forgejo counts the skip as a pass, so the `same-repo-pr` job fails these PRs instead.
+    # Forgejo treats an AGit PR as a fork.
+    # An AGit poster's own events run the PR's copy of this workflow, where this guard
+    # could be deleted. Those runs start only after approval.
+    # `head.repo.fork` is unreliable: AGit reuses repo identity without push access.
     # Keep toJSON: a bare flow == 0 also admits a missing, null, '' or '0' flow (all coerce to 0).
     if: github.event.pull_request.head.repo.full_name == github.repository && toJSON(github.event.pull_request.flow) == '0'
     runs-on: ubuntu-latest
@@ -61,7 +62,22 @@ jobs:
           )
           pr_fields="${RUNNER_TEMP}/commit-msg-pr"
           mkdir -p "$pr_fields"
-          printf '%s' "$pr_json" | FIELD_REF="$pr_fields/ref" FIELD_TITLE="$pr_fields/title" node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const fs=require("node:fs");const pr=JSON.parse(s);const ref=pr?.base?.ref;const title=pr?.title;if(typeof ref!=="string"||ref.length===0){process.stderr.write("pull request response has no base ref\n");process.exit(1)}if(typeof title!=="string"){process.stderr.write("pull request response has no title\n");process.exit(1)}fs.writeFileSync(process.env.FIELD_REF,ref);fs.writeFileSync(process.env.FIELD_TITLE,title)})'
+          printf '%s' "$pr_json" | FIELD_REF="$pr_fields/ref" FIELD_TITLE="$pr_fields/title" node -e '
+            const fs = require("node:fs");
+            const pr = JSON.parse(fs.readFileSync(0, "utf8"));
+            const ref = pr?.base?.ref;
+            const title = pr?.title;
+            if (typeof ref !== "string" || ref.length === 0) {
+              process.stderr.write("pull request response has no base ref\n");
+              process.exit(1);
+            }
+            if (typeof title !== "string") {
+              process.stderr.write("pull request response has no title\n");
+              process.exit(1);
+            }
+            fs.writeFileSync(process.env.FIELD_REF, ref);
+            fs.writeFileSync(process.env.FIELD_TITLE, title);
+          '
 
       - name: Validate commit title and subjects
         # Validate the messages a merge places on the target branch; the

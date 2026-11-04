@@ -125,6 +125,36 @@ jobs:
         if: steps.baked-pnpm.outputs.match != 'true'
         uses: pnpm/action-setup@v5
 
+      - name: Require the job image's baked Node
+        env:
+          REQUIRED_NODE_VERSION_FILE: ".node-version"
+        run: |
+          set -eu
+          if [ -n "${REQUIRED_NODE_VERSION:-}" ] && [ -z "${REQUIRED_NODE_VERSION_FILE:-}" ]; then
+            version="$REQUIRED_NODE_VERSION"
+            pin="this workflow's Node pin"
+          elif [ -z "${REQUIRED_NODE_VERSION:-}" ] && [ -n "${REQUIRED_NODE_VERSION_FILE:-}" ]; then
+            version="$(cat -- "$REQUIRED_NODE_VERSION_FILE")"
+            pin="$REQUIRED_NODE_VERSION_FILE"
+          else
+            echo "::error::The baked Node check needs exactly one of REQUIRED_NODE_VERSION and REQUIRED_NODE_VERSION_FILE."
+            exit 1
+          fi
+          case "$version" in
+            "" | *[!0-9.]* | .* | *. | *..* | *.*.*.*) exact=false ;;
+            *.*.*) exact=true ;;
+            *) exact=false ;;
+          esac
+          if [ "$exact" != true ]; then
+            echo "::error::$pin does not name an exact Node version (X.Y.Z), so setup-node would resolve it from GitHub."
+            exit 1
+          fi
+          if [ ! -f "${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/node/$version/x64.complete" ]; then
+            echo "::error::This job image does not bake Node $version, so setup-node would download it from GitHub. If $pin is older than j4k-align's policy, run j4k-align --fix. Otherwise bake Node $version in j4k/cluster node_ci_node_versions first."
+            exit 1
+          fi
+          echo "Node $version is baked into this job image."
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
