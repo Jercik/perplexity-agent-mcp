@@ -1,6 +1,6 @@
 ---
 # Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/workflows/review-forgejo.yml.hbs
-# Direct edits are drift and are overwritten on the next targeted --fix; edit the template.
+# Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 #
 # Thin caller: the review-wrapper action IS the PR's "Review" check.
 # pull_request_target executes the BASE branch's copy of this file, so a PR

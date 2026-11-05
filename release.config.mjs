@@ -1,3 +1,5 @@
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/release-config.mjs.hbs
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 const releaseConfig = {
   plugins: [
     // The default angular preset cannot parse the Conventional Commits "!" marker,

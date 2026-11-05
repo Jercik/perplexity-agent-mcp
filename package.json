@@ -46,6 +46,7 @@
     "rebuild": "pnpm run clean && pnpm run build",
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
+    "test:affected": "pnpm run test --since-last-run",
     "typecheck": "tsc -b tsconfig.check.json tsconfig.test.json tsconfig.scripts.json tsconfig.app.json tsconfig.build.json --noEmit"
   },
   "dependencies": {
@@ -66,7 +67,7 @@
     "oxlint-tsgolint": "^7.0.2003",
     "semantic-release": "^25.0.3",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.5"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=26.0.0"

@@ -1,4 +1,6 @@
 ---
+# Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/workflows/commit-msg.yml.hbs
+# Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 name: commit-msg
 
 # Enforce commit-message policy before merge; see the validation step below.
@@ -16,10 +18,11 @@ jobs:
     # The job checks out that PR's head and executes its checker, so the PR's code
     # would run on a root runner. Fork and AGit PRs therefore skip this check.
     # Forgejo counts the skip as a pass, so the `same-repo-pr` job fails these PRs instead.
-    # Forgejo treats an AGit PR as a fork.
-    # An AGit poster's own events run the PR's copy of this workflow, where this guard
-    # could be deleted. Those runs start only after approval.
-    # `head.repo.fork` is unreliable: AGit reuses repo identity without push access.
+    # The poster's own events run the PR's copy of this workflow, where this guard
+    # could be deleted. Forgejo's Actions approval covers AGit PRs as it covers forks,
+    # so those runs start only after approval.
+    # An AGit PR names this repository as its head repository, so `head.repo.full_name`
+    # and `head.repo.fork` cannot exclude it. Only its `flow` of 1 can; a branch PR has 0.
     # Keep toJSON: a bare flow == 0 also admits a missing, null, '' or '0' flow (all coerce to 0).
     if: github.event.pull_request.head.repo.full_name == github.repository && toJSON(github.event.pull_request.flow) == '0'
     runs-on: ubuntu-latest

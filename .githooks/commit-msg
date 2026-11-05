@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
+# Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/githook-commit-msg-pnpm.sh.hbs
+# Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 # Native Git hook - enable with: git config core.hooksPath .githooks
 set -euo pipefail
 
-bash scripts/check-msg.sh < "$1"
+bash scripts/check-msg.sh --draft < "$1"
 
 ignored_staged_paths=(
   ":(exclude).claude/**"
@@ -115,6 +117,15 @@ fi
 snapshot_parent=()
 if git rev-parse --quiet --verify HEAD >/dev/null; then
   snapshot_parent=(-p HEAD)
+fi
+# During a merge, give the snapshot commit HEAD and every MERGE_HEAD entry as parents, so checks that judge history see the merge.
+merge_head_file=$(git rev-parse --git-path MERGE_HEAD)
+if [[ -f $merge_head_file ]]; then
+  while IFS= read -r merge_parent; do
+    if [[ -n $merge_parent ]]; then
+      snapshot_parent+=(-p "$merge_parent")
+    fi
+  done < "$merge_head_file"
 fi
 snapshot_commit=$(git commit-tree "${snapshot_parent[@]+"${snapshot_parent[@]}"}" -m "pre-commit snapshot" "$snapshot_tree")
 git_common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
