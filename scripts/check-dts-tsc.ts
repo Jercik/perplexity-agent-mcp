@@ -1,4 +1,5 @@
-// Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-tsc.ts
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-tsc.ts
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import { rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 

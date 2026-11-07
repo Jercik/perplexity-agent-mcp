@@ -257,4 +257,9 @@ if [[ "$static_failed" -ne 0 ]]; then
   printf '%s\n' 'Static checks failed; tests were not started.' >&2
   exit 1
 fi
-run_script "test"
+# CI runs the full suite before a merge, so the hook runs only the tests Vitest's import graph
+# connects to this commit, as early feedback. The base travels as one token so a wrapper cannot
+# separate it from the flag.
+if git rev-parse --quiet --verify HEAD~1 >/dev/null; then
+  run_step "test --changed=HEAD~1" pnpm run "test" --changed=HEAD~1
+fi

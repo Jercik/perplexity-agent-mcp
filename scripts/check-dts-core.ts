@@ -1,4 +1,5 @@
-// Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-core.ts
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-core.ts
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 

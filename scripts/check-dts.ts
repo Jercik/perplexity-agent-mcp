@@ -1,4 +1,5 @@
-// Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts.ts
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts.ts
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import { constants } from "node:os";
 
 import { stopRunningTypeScript } from "./check-dts-process.ts";

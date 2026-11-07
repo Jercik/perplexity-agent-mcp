@@ -1,4 +1,5 @@
-// Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-process.ts
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-process.ts
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import path from "node:path";

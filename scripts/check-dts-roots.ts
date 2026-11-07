@@ -1,4 +1,5 @@
-// Managed by j4k-align: https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-roots.ts
+// Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/repo/check-dts/check-dts-roots.ts
+// Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import path from "node:path";
 
 import { GuardFailureError, isRecord, readJsonRecord, repositoryRoot } from "./check-dts-core.ts";
