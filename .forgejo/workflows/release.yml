@@ -3,9 +3,9 @@
 # Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 name: Release
 
-# Required PR status checks are intentionally disabled, so the release gate verifies
-# the merged revision before publishing: it runs the managed quality suite, or reuses
-# a pull request pass on the same tree (https://code.j4k.dev/j4k/align/src/branch/main/docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md).
+# Pull request checks test the head, not its merge with the current base, so the release
+# gate verifies the merged revision before publishing: it runs the managed quality suite,
+# or reuses a pull request pass on the same tree (https://code.j4k.dev/j4k/align/src/branch/main/docs/adr/0004-forgejo-checks-reuse-same-tree-passes.md).
 
 on:
   push:

@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@j4k-oss/fta-check": "^1.5.10",
-    "@j4k/oxlint-config": "^2.14.5",
+    "@j4k/oxlint-config": "^2.14.12",
     "@j4k/semantic-release-forgejo": "^1.2.4",
     "@total-typescript/ts-reset": "^0.6.1",
     "@types/node": "^26.0.0",
@@ -63,8 +63,8 @@
     "fta-cli": "^3.0.0",
     "knip": "^6.8.0",
     "oxfmt": "^0.57.0",
-    "oxlint": "^1.86.0",
-    "oxlint-tsgolint": "^7.0.2003",
+    "oxlint": "^1.92.0",
+    "oxlint-tsgolint": "^7.0.2006",
     "semantic-release": "^25.0.3",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"

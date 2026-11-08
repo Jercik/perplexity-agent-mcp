@@ -254,12 +254,15 @@ fi
 run_script "lint" || static_failed=1
 run_script "fta" || static_failed=1
 if [[ "$static_failed" -ne 0 ]]; then
-  printf '%s\n' 'Static checks failed; tests were not started.' >&2
+  printf '%s\n' 'Static checks failed.' >&2
   exit 1
 fi
 # CI runs the full suite before a merge, so the hook runs only the tests Vitest's import graph
-# connects to this commit, as early feedback. The base travels as one token so a wrapper cannot
-# separate it from the flag.
+# connects to the staged changes, as early feedback; with no parent commit to diff against, as on
+# a repository's first commit, it runs no tests. The base travels as one token so a wrapper script
+# cannot separate it from the flag.
+# HEAD is the snapshot commit, so HEAD~1 is the commit being built on, or for an amend the commit
+# being amended.
 if git rev-parse --quiet --verify HEAD~1 >/dev/null; then
   run_step "test --changed=HEAD~1" pnpm run "test" --changed=HEAD~1
 fi
