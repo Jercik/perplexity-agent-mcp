@@ -116,6 +116,13 @@ function distinctProblems(problems: readonly Problem[]): Problem[] {
   return [...distinct.values()];
 }
 
+export function formatSuccess(projectCount: number, ignoredCount: number): string {
+  const projectWord = projectCount === 1 ? "project" : "projects";
+  const ignored =
+    ignoredCount === 0 ? "" : ` (${ignoredCount} unrelated dependency diagnostics ignored)`;
+  return `check:dts: ${projectCount} ${projectWord} checked, no unresolved imports in dependency typings${ignored}`;
+}
+
 export function formatFailure(allProblems: readonly Problem[]): string {
   const problems = distinctProblems(allProblems);
   const lines = [

@@ -259,8 +259,8 @@ if [[ "$static_failed" -ne 0 ]]; then
 fi
 # CI runs the full suite before a merge, so the hook runs only the tests Vitest's import graph
 # connects to the staged changes, as early feedback; with no parent commit to diff against, as on
-# a repository's first commit, it runs no tests. The base travels as one token so a wrapper script
-# cannot separate it from the flag.
+# a repository's first commit, it runs no tests. The flag and its base share one argument, so a
+# test script that wraps Vitest cannot split them apart.
 # HEAD is the snapshot commit, so HEAD~1 is the commit being built on, or for an amend the commit
 # being amended.
 if git rev-parse --quiet --verify HEAD~1 >/dev/null; then

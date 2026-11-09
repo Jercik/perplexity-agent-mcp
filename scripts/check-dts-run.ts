@@ -2,13 +2,13 @@
 // Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import path from "node:path";
 
-import { GuardFailureError, repositoryRoot } from "./check-dts-core.ts";
+import { GuardFailureError, readJsonRecord, repositoryRoot } from "./check-dts-core.ts";
 import type { LeafReport } from "./check-dts-core.ts";
 import { assertSupportedInstallLayout } from "./check-dts-layout.ts";
 import { classifyReports } from "./check-dts-package.ts";
-import { formatFailure } from "./check-dts-report.ts";
+import { formatFailure, formatSuccess } from "./check-dts-report.ts";
 import { typecheckProjects } from "./check-dts-roots.ts";
-import { checkLeaf, describeConfig } from "./check-dts-tsc.ts";
+import { describeConfig, interpretLeafRun, runLeafCheck } from "./check-dts-tsc.ts";
 
 // `tsc -p` on a solution-style root type-checks nothing, so every leaf of the
 // reference graph gets its own run, starting at the projects `typecheck` checks.
@@ -29,7 +29,10 @@ async function collectLeaves(): Promise<string[]> {
       await visit(target.endsWith(".json") ? target : path.join(target, "tsconfig.json"));
     }
   }
-  const roots = typecheckProjects();
+  const roots = typecheckProjects(
+    readJsonRecord(path.join(repositoryRoot, "package.json")),
+    repositoryRoot,
+  );
   for (const root of roots) {
     await visit(root);
   }
@@ -44,7 +47,7 @@ async function collectLeaves(): Promise<string[]> {
 async function checkLeaves(leaves: string[]): Promise<LeafReport[]> {
   const reports: LeafReport[] = [];
   for (const leaf of leaves) {
-    reports.push(await checkLeaf(leaf));
+    reports.push(interpretLeafRun(leaf, await runLeafCheck(leaf)));
   }
   return reports;
 }
@@ -61,11 +64,7 @@ async function run(): Promise<number> {
     process.stderr.write(`${formatFailure(problems)}\n`);
     return 1;
   }
-  const projectWord = leaves.length === 1 ? "project" : "projects";
-  process.stdout.write(
-    `check:dts: ${leaves.length} ${projectWord} checked, no unresolved imports in dependency typings` +
-      `${ignoredCount === 0 ? "" : ` (${ignoredCount} unrelated dependency diagnostics ignored)`}\n`,
-  );
+  process.stdout.write(`${formatSuccess(leaves.length, ignoredCount)}\n`);
   return 0;
 }
 

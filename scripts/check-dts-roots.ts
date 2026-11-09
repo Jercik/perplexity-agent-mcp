@@ -2,7 +2,7 @@
 // Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import path from "node:path";
 
-import { GuardFailureError, isRecord, readJsonRecord, repositoryRoot } from "./check-dts-core.ts";
+import { GuardFailureError, isRecord } from "./check-dts-core.ts";
 
 // Flags that leave `tsc -b` checking the same projects; any other flag is refused
 // instead of guessed at, because a flag such as `--clean` or `--watch` changes what runs.
@@ -34,7 +34,7 @@ function refuse(command: string, reason: string): never {
 // The projects `typecheck` builds, which are the roots of the reference graph the
 // guard walks. A bare `tsc -b` builds `tsconfig.json`; a directory means its `tsconfig.json`.
 // Outside build mode, `tsc --noEmit` (a flat-layout `typecheck`) checks `tsconfig.json`.
-function parseTypecheckProjects(command: string): string[] {
+function parseTypecheckProjects(command: string, root: string): string[] {
   const plain = command.split(/\s+/u).filter((token) => token !== "");
   const unplain = plain.find((token) => !PLAIN_TOKEN.test(token));
   if (unplain !== undefined) {
@@ -62,18 +62,18 @@ function parseTypecheckProjects(command: string): string[] {
     }
   }
   return (projects.length === 0 ? ["tsconfig.json"] : projects).map((project) => {
-    const resolved = path.resolve(repositoryRoot, project);
+    const resolved = path.resolve(root, project);
     return resolved.endsWith(".json") ? resolved : path.join(resolved, "tsconfig.json");
   });
 }
 
-export function typecheckProjects(): string[] {
-  const { scripts } = readJsonRecord(path.join(repositoryRoot, "package.json"));
+export function typecheckProjects(manifest: Record<string, unknown>, root: string): string[] {
+  const { scripts } = manifest;
   const command = isRecord(scripts) ? scripts.typecheck : undefined;
   if (typeof command !== "string") {
     throw new GuardFailureError(
       "package.json has no typecheck script, so the guard cannot tell which projects to check",
     );
   }
-  return parseTypecheckProjects(command);
+  return parseTypecheckProjects(command, root);
 }

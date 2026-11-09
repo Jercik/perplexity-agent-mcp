@@ -1,0 +1,149 @@
+---
+# Rendered by j4k-align from https://code.j4k.dev/j4k/align/src/branch/main/templates/workflows/pnpm-store-forgejo.yml.hbs
+# Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
+name: pnpm store
+
+# Pull requests only restore the pnpm store, and not every repository installs
+# on each push to main, so this workflow saves the store for every lockfile that
+# reaches main.
+on:
+  push:
+    branches: [main]
+
+# Workflow-level: Forgejo gates OIDC issuance on the enable-openid-connect key
+# (it ignores a GitHub-style `permissions:` block), applied to every job.
+enable-openid-connect: true
+
+# pnpm defaults verify-deps-before-run to "install"; this workflow runs no
+# script, but keeps the pin j4k-align requires. Only this spelling disables it:
+# pnpm reads pnpm_config_verify_deps_before_run raw from the environment.
+env:
+  pnpm_config_verify_deps_before_run: "false"
+  # The pnpm cache version includes the store path, so this matches the path the
+  # restoring workflows set, and they find the entry this workflow saves.
+  pnpm_config_store_dir: /tmp/pnpm-store
+
+jobs:
+  save-store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # Skip pnpm/action-setup's download when the job image already has the exact pnpm version packageManager names; otherwise the action installs it.
+      - name: Check for baked pnpm
+        id: baked-pnpm
+        run: |
+          set -eu
+          probe="$(mktemp -d "$RUNNER_TEMP/baked-pnpm.XXXXXX")"
+          trap '[ -z "$probe" ] || rm -rf "$probe"' EXIT
+          printf '{"private":true}\n' > "$probe/package.json"
+          baked="$(cd "$probe" && pnpm --version 2>/dev/null)" || baked=""
+          pin="$(node -p 'const pin = JSON.parse(require("node:fs").readFileSync("./package.json", "utf8")).packageManager; typeof pin === "string" ? pin : ""' 2>/dev/null)" || pin=""
+          if [ -n "$baked" ] && [ "$pin" = "pnpm@$baked" ]; then
+            echo "pnpm $baked in the image matches packageManager; skipping pnpm/action-setup."
+            echo "match=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$baked" ]; then
+            echo "pnpm $baked in the image does not match packageManager; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No pnpm in the image; pnpm/action-setup installs the pinned version."
+            echo "match=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.baked-pnpm.outputs.match != 'true'
+        uses: pnpm/action-setup@v5
+
+      - name: Require the job image's baked Node
+        shell: bash
+        env:
+          REQUIRED_NODE_VERSION_FILE: ".node-version"
+        run: |
+          set -eu
+          if [ -z "${BASH_VERSION:-}" ]; then
+            echo "::error::The baked Node check needs shell: bash on its step."
+            exit 1
+          fi
+          version="$(cat -- "$REQUIRED_NODE_VERSION_FILE")"
+          pin="$REQUIRED_NODE_VERSION_FILE"
+          if ! [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$pin does not name an exact Node version (X.Y.Z), so setup-node would resolve it from GitHub."
+            exit 1
+          fi
+          if [ ! -f "${RUNNER_TOOL_CACHE:-/opt/hostedtoolcache}/node/$version/x64.complete" ]; then
+            echo "::error::This job image does not bake Node $version, so setup-node would download it from GitHub. If $pin is older than j4k-align's policy, run j4k-align --fix. Otherwise bake Node $version in j4k/cluster node_ci_node_versions first."
+            exit 1
+          fi
+          echo "Node $version is baked into this job image."
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: ".node-version"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Look up pnpm store
+        id: pnpm-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          lookup-only: true
+
+      - name: Configure registry auth
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        env:
+          NPM_READ_AUDIENCE: ${{ vars.NPM_READ_AUDIENCE }}
+          NPMRC_AUTH_SCOPE: "code.j4k.dev/api/packages/j4k/npm"
+        run: |
+          set -eu
+          if [ -z "${NPM_READ_AUDIENCE:-}" ]; then
+            echo "::error::NPM_READ_AUDIENCE variable is not set. It is the server-generated audience for the org npm-reader integration; reconcile it from j4k-cluster."
+            exit 1
+          fi
+          if [ -z "${NPMRC_AUTH_SCOPE:-}" ]; then
+            echo "::error::NPMRC_AUTH_SCOPE is not set; the workflow must pass the registry's npmrc auth scope."
+            exit 1
+          fi
+          # Fail with a clear message, not a raw curl error, when the OIDC request vars are absent (fork PR, or enable-openid-connect inactive).
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::No Actions OIDC token on this run (a fork PR Forgejo withholds it from, or enable-openid-connect is inactive)."
+            exit 1
+          fi
+          # Forgejo appends `&audience=` to the placeholder-terminated request URL
+          # and returns {"value": "<jwt>"}. The registry accepts the JWT as a
+          # Bearer _authToken for the integration owner. pnpm ignores env
+          # references in credentials it does not expand itself, so the token is
+          # written literally into the trusted user-level ~/.npmrc.
+          NODE_AUTH_TOKEN="$(
+            curl -fsSL \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL:-}&audience=${NPM_READ_AUDIENCE}" \
+              | sed -n 's/.*"value" *: *"\([^"]*\)".*/\1/p'
+          )"
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::Failed to obtain an Actions OIDC token for the private registry install."
+            exit 1
+          fi
+          # A curl-fetched token is not auto-masked like a secrets.* value; register it so no later step can print it.
+          echo "::add-mask::${NODE_AUTH_TOKEN}"
+          echo "//${NPMRC_AUTH_SCOPE}/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          # Workflow-level enable-openid-connect exposes ACTIONS_ID_TOKEN_REQUEST_* to every step; blank them so no later step can mint another token.
+          printf 'ACTIONS_ID_TOKEN_REQUEST_URL=\nACTIONS_ID_TOKEN_REQUEST_TOKEN=\n' >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        # Only the store is kept, so no dependency install script needs to run.
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Save pnpm store
+        if: steps.pnpm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}

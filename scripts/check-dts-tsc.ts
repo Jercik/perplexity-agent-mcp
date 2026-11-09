@@ -41,7 +41,7 @@ function isConfigurationCode(code: number): boolean {
   return (code >= 5000 && code < 7000) || code === 18_003;
 }
 
-function interpretLeafRun(leaf: string, result: ProcessResult): LeafReport {
+export function interpretLeafRun(leaf: string, result: ProcessResult): LeafReport {
   const label = path.relative(repositoryRoot, leaf);
   const { stdout, status } = requireOrderlyRun(label, result);
   if (status === 0) {
@@ -130,7 +130,7 @@ export function removePendingOverlays(): void {
 // The overlay sits beside the leaf because TypeScript derives the default `types`
 // lookup (node_modules/@types, walking up) from the directory of the config it was
 // given, not from the config it extends.
-export async function checkLeaf(leaf: string): Promise<LeafReport> {
+export async function runLeafCheck(leaf: string): Promise<ProcessResult> {
   const overlay = path.join(path.dirname(leaf), `.tsconfig.check-dts.${path.basename(leaf)}`);
   pendingOverlays.add(overlay);
   try {
@@ -155,7 +155,7 @@ export async function checkLeaf(leaf: string): Promise<LeafReport> {
         references: [],
       }),
     );
-    return interpretLeafRun(leaf, await runTypeScript(["-p", overlay, "--pretty", "false"]));
+    return await runTypeScript(["-p", overlay, "--pretty", "false"]);
   } finally {
     rmSync(overlay, { force: true });
     pendingOverlays.delete(overlay);
