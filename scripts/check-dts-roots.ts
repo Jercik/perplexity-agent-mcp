@@ -2,7 +2,7 @@
 // Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 import path from "node:path";
 
-import { GuardFailureError, isRecord } from "./check-dts-core.ts";
+import { GuardFailureError, isRecord, readJsonRecord, repositoryRoot } from "./check-dts-core.ts";
 
 // Flags that leave `tsc -b` checking the same projects; any other flag is refused
 // instead of guessed at, because a flag such as `--clean` or `--watch` changes what runs.
@@ -67,7 +67,19 @@ function parseTypecheckProjects(command: string, root: string): string[] {
   });
 }
 
-export function typecheckProjects(manifest: Record<string, unknown>, root: string): string[] {
+export function typecheckProjects(): string[] {
+  return projectsFromManifest(
+    readJsonRecord(path.join(repositoryRoot, "package.json")),
+    repositoryRoot,
+  );
+}
+
+/**
+ * align's tests drive this without a checkout or a tsc run; the `@public` tag
+ * keeps knip from reporting the export as unused.
+ * @public
+ */
+export function projectsFromManifest(manifest: Record<string, unknown>, root: string): string[] {
   const { scripts } = manifest;
   const command = isRecord(scripts) ? scripts.typecheck : undefined;
   if (typeof command !== "string") {

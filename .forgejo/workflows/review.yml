@@ -62,9 +62,9 @@
 # fires on title and body edits, so a metadata-only edit cancels any live pass
 # and reconciles the unchanged head.
 #
-# Recursion guard: every wrapper write is an issue/review comment or a
-# conversation resolution — none fires the `pull_request_target` family. Any
-# trigger widening must re-prove this.
+# Recursion guard: the review wrapper must make no write that fires the
+# `pull_request_target` types below, such as a push or a title, body or base
+# edit. Any trigger widening must re-prove this.
 name: Review
 
 on:

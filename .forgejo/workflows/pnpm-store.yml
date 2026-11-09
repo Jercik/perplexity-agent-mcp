@@ -3,9 +3,8 @@
 # Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 name: pnpm store
 
-# Pull requests only restore the pnpm store, and not every repository installs
-# on each push to main, so this workflow saves the store for every lockfile that
-# reaches main.
+# Saves the pnpm store for every lockfile that reaches main, as the only Forge
+# workflow that saves it. The cache server keeps pull request writes from main.
 on:
   push:
     branches: [main]
@@ -19,8 +18,8 @@ enable-openid-connect: true
 # pnpm reads pnpm_config_verify_deps_before_run raw from the environment.
 env:
   pnpm_config_verify_deps_before_run: "false"
-  # The pnpm cache version includes the store path, so this matches the path the
-  # restoring workflows set, and they find the entry this workflow saves.
+  # The actions/cache entry version includes the cached path, so this matches the
+  # path the restoring workflows set, and they find the entry this workflow saves.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
@@ -115,8 +114,8 @@ jobs:
             echo "::error::No Actions OIDC token on this run (a fork PR Forgejo withholds it from, or enable-openid-connect is inactive)."
             exit 1
           fi
-          # Forgejo appends `&audience=` to the placeholder-terminated request URL
-          # and returns {"value": "<jwt>"}. The registry accepts the JWT as a
+          # The step appends `&audience=` to Forgejo's placeholder-terminated
+          # request URL, and Forgejo returns {"value": "<jwt>"}. The registry accepts the JWT as a
           # Bearer _authToken for the integration owner. pnpm ignores env
           # references in credentials it does not expand itself, so the token is
           # written literally into the trusted user-level ~/.npmrc.

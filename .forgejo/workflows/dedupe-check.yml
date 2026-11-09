@@ -31,8 +31,9 @@ env:
   # An in-tree store would put node_modules above the global virtual store's package
   # files and mask dependency-declaration leaks from TypeScript; keep it out of the workspace.
   # Forge jobs skip pnpm/action-setup when the job image already has the pinned pnpm, and
-  # the pnpm cache version includes the store path. Setting the store directory explicitly
-  # gives the skipped and the installing runs the same path, so they share one cache entry.
+  # the actions/cache entry version includes the cached path. Setting the store directory
+  # explicitly gives the skipped and the installing runs the same path, so they share one
+  # cache entry.
   pnpm_config_store_dir: /tmp/pnpm-store
 
 jobs:
@@ -141,8 +142,8 @@ jobs:
             echo "::error::No Actions OIDC token on this run (a fork PR Forgejo withholds it from, or enable-openid-connect is inactive)."
             exit 1
           fi
-          # Forgejo appends `&audience=` to the placeholder-terminated request URL
-          # and returns {"value": "<jwt>"}. The registry accepts the JWT as a
+          # The step appends `&audience=` to Forgejo's placeholder-terminated
+          # request URL, and Forgejo returns {"value": "<jwt>"}. The registry accepts the JWT as a
           # Bearer _authToken for the integration owner. pnpm ignores env
           # references in credentials it does not expand itself, so the token is
           # written literally into the trusted user-level ~/.npmrc.
@@ -168,11 +169,3 @@ jobs:
       - name: Check for dedupe opportunities
         # Keep --ignore-pnpmfile: pnpm loads pnpmfiles for every command and --ignore-scripts does not block them, so a PR could point pnpm-workspace.yaml's pnpmfile setting at a file that survives the .pnpmfile.* strip and runs arbitrary code with the registry token in ~/.npmrc. Keep registry credentials available for authenticated dedupe.
         run: pnpm dedupe --check --ignore-scripts --ignore-pnpmfile
-
-      - name: Save pnpm store
-        # Last step, so it saves only after the whole job succeeded. The key comes from the restore step so install cannot change it. Pull requests only restore, so a miss never adds an upload to a PR's critical path; every other event saves.
-        if: github.event_name != 'pull_request' && steps.pnpm-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
