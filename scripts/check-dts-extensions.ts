@@ -16,9 +16,9 @@ type UndeclaredProblem = Extract<Problem, { kind: "undeclared" }>;
 
 /**
  * The modules j4k-align's packageExtensions table already adds, by package. A leak
- * the table covers is fixed by `j4k-align --path /path/to/checkout --fix` (replace the checkout placeholder); a hand edit would only be
- * replaced by it. The `@public` tag keeps knip from reporting the export as
- * unused.
+ * the table covers is fixed by `j4k-align --path <checkout> --fix`; a hand edit
+ * would only be replaced by it. The `@public` tag keeps knip from reporting the
+ * export as unused.
  * @public
  */
 export const ALIGN_TABLE_MODULES: Readonly<Record<string, readonly string[]>> = {
