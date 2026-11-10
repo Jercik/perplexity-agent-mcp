@@ -176,8 +176,8 @@ importers:
         version: 4.6.7
     devDependencies:
       '@j4k-oss/fta-check':
-        specifier: ^1.6.2
-        version: 1.6.2(fta-cli@3.1.0)
+        specifier: ^1.6.3
+        version: 1.6.3(fta-cli@3.1.0)
       '@j4k/oxlint-config':
         specifier: ^2.14.12
         version: 2.14.12(oxlint-tsgolint@7.0.2006)(oxlint@1.92.0(oxlint-tsgolint@7.0.2006))
@@ -267,8 +267,8 @@ packages:
     peerDependencies:
       hono: ^4 || ^5.0.0-0
 
-  '@j4k-oss/fta-check@1.6.2':
-    resolution: {integrity: sha512-kTSsxx+SgV+tmLp5j719biQTZ4K7YJwS/hv8/L/FLlzaBHdoiC9uoRfcZT7InP2caefIRfyxy8f4aAzcakbmqw==, tarball: https://code.j4k.dev/api/packages/j4k-oss/npm/%40j4k-oss%2Ffta-check/-/1.6.2/fta-check-1.6.2.tgz}
+  '@j4k-oss/fta-check@1.6.3':
+    resolution: {integrity: sha512-eZCDwUhwMQ+eVoeVq9JMQyaBFCpMtNLdzby7ZCEzrKZd0nVbP1wao24X3JrlnRhDaw5QdMoSJ+AWj0+nwHoJrg==, tarball: https://code.j4k.dev/api/packages/j4k-oss/npm/%40j4k-oss%2Ffta-check/-/1.6.3/fta-check-1.6.3.tgz}
     hasBin: true
     peerDependencies:
       fta-cli: ^3.0.0
@@ -2946,7 +2946,7 @@ snapshots:
     dependencies:
       hono: 4.13.17
 
-  '@j4k-oss/fta-check@1.6.2(fta-cli@3.1.0)':
+  '@j4k-oss/fta-check@1.6.3(fta-cli@3.1.0)':
     dependencies:
       '@commander-js/extra-typings': 15.1.0(commander@15.1.0)
       commander: 15.1.0

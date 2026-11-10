@@ -55,7 +55,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@j4k-oss/fta-check": "^1.6.2",
+    "@j4k-oss/fta-check": "^1.6.3",
     "@j4k/oxlint-config": "^2.14.12",
     "@j4k/semantic-release-forgejo": "^1.2.5",
     "@total-typescript/ts-reset": "^0.6.1",
