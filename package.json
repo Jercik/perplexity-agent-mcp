@@ -47,7 +47,8 @@
     "start": "node dist/index.js",
     "test": "PERPLEXITY_API_KEY=dummy-api-key vitest run",
     "test:affected": "pnpm run test --since-last-run",
-    "typecheck": "tsc -b tsconfig.check.json tsconfig.test.json tsconfig.scripts.json tsconfig.app.json tsconfig.build.json --noEmit"
+    "typecheck": "tsc -b tsconfig.check.json tsconfig.test.json tsconfig.scripts.json tsconfig.app.json tsconfig.build.json --noEmit",
+    "validate:packed-packages": "node scripts/validate-packed-packages.ts --packer npm"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -65,6 +66,7 @@
     "oxfmt": "^0.57.0",
     "oxlint": "^1.92.0",
     "oxlint-tsgolint": "^7.0.2006",
+    "publint": "^0.3.25",
     "semantic-release": "^25.0.3",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"

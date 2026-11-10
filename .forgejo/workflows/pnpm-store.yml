@@ -3,8 +3,9 @@
 # Direct edits are drift and are overwritten on the next targeted `--fix`; edit the template.
 name: pnpm store
 
-# Saves the pnpm store for every lockfile that reaches main, as the only Forge
-# workflow that saves it. The cache server keeps pull request writes from main.
+# Saves the pnpm store for every lockfile that reaches main. A pull request run
+# cannot: the cache entries it writes are visible only to later runs of that pull
+# request, not to runs on main or to other pull requests.
 on:
   push:
     branches: [main]

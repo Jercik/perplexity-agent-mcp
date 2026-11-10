@@ -222,8 +222,8 @@ jobs:
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          # Pull requests fall back to the newest store saved for another lockfile, so a lockfile change downloads only the packages it adds. They never save, so the fallback's stale packages never reach a saved entry.
-          restore-keys: ${{ github.event_name == 'pull_request' && format('node-cache-{0}-{1}-pnpm-', runner.os, runner.arch) || '' }}
+          # On a miss, restore the newest store saved for another lockfile, so install downloads only the packages this lockfile adds. A run that saves must restore only its exact key, or its saved entry would keep the other lockfile's packages.
+          restore-keys: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-
 
       - name: Configure registry auth
         env:
@@ -295,6 +295,9 @@ jobs:
 
       - name: Run build
         run: pnpm run build
+
+      - name: Validate packed packages
+        run: pnpm run validate:packed-packages
 
       - name: Run tests
         run: pnpm run test

@@ -42,8 +42,8 @@ function isConfigurationCode(code: number): boolean {
 }
 
 /**
- * align's tests drive this without a checkout or a tsc run; the `@public` tag
- * keeps knip from reporting the export as unused.
+ * Judges the result of a tsc run that already finished, so it starts no tsc
+ * process. The `@public` tag keeps knip from reporting the export as unused.
  * @public
  */
 export function interpretLeafRun(leaf: string, result: ProcessResult): LeafReport {

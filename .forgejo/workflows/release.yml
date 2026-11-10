@@ -166,6 +166,8 @@ jobs:
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          # On a miss, restore the newest store saved for another lockfile, so install downloads only the packages this lockfile adds. A run that saves must restore only its exact key, or its saved entry would keep the other lockfile's packages.
+          restore-keys: node-cache-${{ runner.os }}-${{ runner.arch }}-pnpm-
 
       - name: Configure registry auth
         env:
