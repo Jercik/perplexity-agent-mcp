@@ -99,11 +99,9 @@ if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
   manifests_staged=true
 fi
 
-# The declaration check runs only when a commit stages one of the inputs that
-# dts_inputs_staged tests below, to keep source-only commits fast. A
-# source-only commit that first imports an already-declared package with leaky
-# typings therefore passes here, and CI catches it. Decided before the snapshot
-# worktree is entered, where nothing is staged.
+# A source-only commit that first imports an already-declared package with leaky
+# typings passes here, and CI catches it. Decided before the snapshot worktree
+# is entered, where nothing is staged.
 dts_inputs_staged=false
 if has_staged_changes ':(glob)**/package.json' pnpm-lock.yaml pnpm-workspace.yaml ':(glob)**/tsconfig*.json'; then
   dts_inputs_staged=true
