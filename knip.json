@@ -2,7 +2,6 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/index.ts", "src/ts-reset.d.ts"],
   "project": ["src/**/*.ts"],
-  "ignoreDependencies": ["conventional-changelog-conventionalcommits"],
   "github-actions": {
     "config": [".forgejo/workflows/*.{yml,yaml}"]
   }

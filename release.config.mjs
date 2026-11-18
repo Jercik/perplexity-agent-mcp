@@ -10,9 +10,8 @@ const releaseConfig = {
       {
         preset: "conventionalcommits",
         writerOpts: {
-          // Squashed pull request text and the Co-Authored-By trailer often follow a
-          // BREAKING CHANGE footer, and the commit parser keeps them in the note.
-          // Keep only the note's first paragraph.
+          // Squashed pull request text often follows a BREAKING CHANGE footer, and
+          // the commit parser keeps it in the note. Keep only the note's first paragraph.
           /** @param {{ noteGroups: { notes: { text: string }[] }[] }} context */
           finalizeContext: (context) => ({
             ...context,

@@ -99,9 +99,6 @@ if has_staged_changes package.json pnpm-lock.yaml pnpm-workspace.yaml; then
   manifests_staged=true
 fi
 
-# A source-only commit that first imports an already-declared package with leaky
-# typings passes here, and CI catches it. Decided before the snapshot worktree
-# is entered, where nothing is staged.
 dts_inputs_staged=false
 if has_staged_changes ':(glob)**/package.json' pnpm-lock.yaml pnpm-workspace.yaml ':(glob)**/tsconfig*.json'; then
   dts_inputs_staged=true
