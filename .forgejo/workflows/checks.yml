@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       release_gate:
-        description: Release callers set this so the gate reuses a pull request pass on the same tree when one exists, and otherwise runs the quality checks.
+        description: Set to reuse a pull request pass on the same tree when one exists, and otherwise run the quality checks.
         type: boolean
         default: false
     outputs:
@@ -17,13 +17,11 @@ on:
         description: "'true' when the release gate verified the quality checks."
         value: ${{ jobs.qc-result.outputs.verified }}
 
-# Workflow-level: this file is workflow_call-able — a monorepo release consumes
-# it as a reusable workflow, while a standalone repo renders the same file and
-# runs it on pull_request. Forgejo gates OIDC issuance on enable-openid-connect
-# (it ignores a GitHub-style `permissions:` block); at the workflow level it
-# applies to every job, and act/jobparser resolves job-level precedence when the
-# file is expanded via workflow_call, so workflow-level is the robust,
-# version-independent placement.
+# Workflow-level: Forgejo gates OIDC issuance on enable-openid-connect (it
+# ignores a GitHub-style `permissions:` block); at the workflow level it applies
+# to every job, and act/jobparser resolves job-level precedence when the file is
+# expanded via workflow_call, so workflow-level is the robust, version-independent
+# placement.
 enable-openid-connect: true
 
 # pnpm defaults verify-deps-before-run to "install": the first `pnpm
@@ -305,8 +303,7 @@ jobs:
   # The release gate's verdict. A workflow_call job reads success when its inner
   # jobs are success or skipped, so a skipped quality-checks alone would let the
   # release proceed. This job always runs on a release gate and fails unless the
-  # checks were verified: a reuse hit, or a successful quality-checks. Release
-  # callers also require its `verified` output, so no run publishes without a verdict.
+  # checks were verified: a reuse hit, or a successful quality-checks.
   qc-result:
     if: ${{ always() && inputs.release_gate == true }}
     needs: [reuse, quality-checks]
