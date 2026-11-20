@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { performChatCompletion } from "../perplexity-client.js";
+import { askPerplexity } from "../ask-perplexity.js";
 import { LOOKUP_SYSTEM_PROMPT } from "../prompts.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  * Registers the lookup tool with the MCP server.
  * Fetches precise, source-backed facts from official sources.
  */
-export function registerLookupTool(server: McpServer) {
+export function registerLookupTool(server: McpServer, apiKey: string) {
   server.registerTool(
     "lookup",
     {
@@ -23,15 +23,13 @@ One question per call—split combined requests into separate queries.
       },
     },
     async ({ query }, { signal }) => {
-      const result = await performChatCompletion(
-        [{ role: "user", content: query }],
-        {
-          model: "sonar-pro",
-          system: LOOKUP_SYSTEM_PROMPT,
-          searchContextSize: "medium",
-        },
+      const result = await askPerplexity(query, {
+        apiKey,
+        model: "sonar-pro",
+        system: LOOKUP_SYSTEM_PROMPT,
+        searchContextSize: "medium",
         signal,
-      );
+      });
       return { content: [{ type: "text", text: result }] };
     },
   );

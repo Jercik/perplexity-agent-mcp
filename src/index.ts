@@ -25,19 +25,20 @@ if (parseCommandLine().version) {
   process.exit(0);
 }
 
-// Validate required environment variables
-// Preflight check to fail fast before starting the server for a clearer UX.
-// Note: performChatCompletion() also validates PERPLEXITY_API_KEY as a defensive
-// guard when the client is used in isolation (e.g., tests or scripts).
-const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY;
-if (!PERPLEXITY_API_KEY) {
-  console.error("Error: PERPLEXITY_API_KEY environment variable is required");
-  process.exit(1);
+function readApiKey(): string {
+  const apiKey = process.env.PERPLEXITY_API_KEY;
+  if (!apiKey) {
+    console.error("Error: PERPLEXITY_API_KEY environment variable is required");
+    return process.exit(1);
+  }
+  return apiKey;
 }
+
+const apiKey = readApiKey();
 
 async function main(): Promise<void> {
   try {
-    await runServer();
+    await runServer(apiKey);
   } catch (error) {
     console.error("Fatal error running server:", error);
     process.exit(1);

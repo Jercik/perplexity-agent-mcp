@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { performChatCompletion } from "../perplexity-client.js";
+import { askPerplexity } from "../ask-perplexity.js";
 import { ANSWER_SYSTEM_PROMPT } from "../prompts.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
  * Registers the answer tool with the MCP server.
  * Researches questions and provides recommendations backed by sources.
  */
-export function registerAnswerTool(server: McpServer) {
+export function registerAnswerTool(server: McpServer, apiKey: string) {
   server.registerTool(
     "answer",
     {
@@ -23,15 +23,13 @@ One question per call—split combined requests into separate queries.
       },
     },
     async ({ question }, { signal }) => {
-      const result = await performChatCompletion(
-        [{ role: "user", content: question }],
-        {
-          model: "sonar-reasoning-pro",
-          system: ANSWER_SYSTEM_PROMPT,
-          searchContextSize: "high",
-        },
+      const result = await askPerplexity(question, {
+        apiKey,
+        model: "sonar-reasoning-pro",
+        system: ANSWER_SYSTEM_PROMPT,
+        searchContextSize: "high",
         signal,
-      );
+      });
       return { content: [{ type: "text", text: result }] };
     },
   );

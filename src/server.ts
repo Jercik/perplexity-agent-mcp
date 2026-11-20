@@ -7,7 +7,7 @@ import { registerAnswerTool } from "./tools/answer.js";
 /**
  * Creates and configures the MCP server with all tools
  */
-export function createServer(): McpServer {
+export function createServer(apiKey: string): McpServer {
   const server = new McpServer({
     // Pinned: the scoped Forge package name must not change the name MCP clients see.
     name: "perplexity-agent-mcp",
@@ -15,8 +15,8 @@ export function createServer(): McpServer {
   });
 
   // Register all tools
-  registerLookupTool(server);
-  registerAnswerTool(server);
+  registerLookupTool(server, apiKey);
+  registerAnswerTool(server, apiKey);
 
   return server;
 }
@@ -24,8 +24,8 @@ export function createServer(): McpServer {
 /**
  * Starts the MCP server with stdio transport
  */
-export async function runServer(): Promise<void> {
-  const server = createServer();
+export async function runServer(apiKey: string): Promise<void> {
+  const server = createServer(apiKey);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Perplexity MCP Server running on stdio with Lookup and Answer tools");

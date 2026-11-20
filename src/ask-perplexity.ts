@@ -1,22 +1,25 @@
 import { formatPerplexityResponse } from "./format-perplexity-response.js";
-import type { ChatOptions } from "./schemas.js";
 
-export async function performChatCompletion(
-  messages: { role: string; content: string }[],
-  options: ChatOptions,
-  signal: AbortSignal,
+interface AskOptions {
+  apiKey: string;
+  model: string;
+  system: string;
+  searchContextSize: "low" | "medium" | "high";
+  signal: AbortSignal;
+}
+
+export async function askPerplexity(
+  question: string,
+  { apiKey, model, system, searchContextSize, signal }: AskOptions,
 ): Promise<string> {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "PERPLEXITY_API_KEY is not set. Please export it before calling performChatCompletion().",
-    );
-  }
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
-    model: options.model,
-    messages: [{ role: "system", content: options.system }, ...messages],
-    web_search_options: { search_context_size: options.searchContextSize },
+    model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: question },
+    ],
+    web_search_options: { search_context_size: searchContextSize },
   };
 
   let response;

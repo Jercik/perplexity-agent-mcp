@@ -22,12 +22,3 @@ export const PerplexityResponse = z.object({
   choices: z.tuple([Choice], Choice),
   search_results: z.array(SearchResult).nullish(),
 });
-
-/**
- * Chat options for Perplexity API requests
- */
-export interface ChatOptions {
-  model: string;
-  system: string;
-  searchContextSize: "low" | "medium" | "high";
-}

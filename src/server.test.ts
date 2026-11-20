@@ -32,7 +32,7 @@ describe("createServer", () => {
       });
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createServer().connect(serverTransport);
+    await createServer("test-api-key").connect(serverTransport);
     await client.connect(clientTransport);
 
     const cancellation = new AbortController();
