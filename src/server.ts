@@ -7,7 +7,7 @@ import { registerAnswerTool } from "./tools/answer.js";
 /**
  * Creates and configures the MCP server with all tools
  */
-function createServer(): McpServer {
+export function createServer(): McpServer {
   const server = new McpServer({
     // Pinned: the scoped Forge package name must not change the name MCP clients see.
     name: "perplexity-agent-mcp",

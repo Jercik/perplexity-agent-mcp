@@ -22,12 +22,16 @@ One question per call—split combined requests into separate queries.
         question: z.string().describe("The decision or problem to answer"),
       },
     },
-    async ({ question }) => {
-      const result = await performChatCompletion([{ role: "user", content: question }], {
-        model: "sonar-reasoning-pro",
-        system: ANSWER_SYSTEM_PROMPT,
-        searchContextSize: "high",
-      });
+    async ({ question }, { signal }) => {
+      const result = await performChatCompletion(
+        [{ role: "user", content: question }],
+        {
+          model: "sonar-reasoning-pro",
+          system: ANSWER_SYSTEM_PROMPT,
+          searchContextSize: "high",
+        },
+        signal,
+      );
       return { content: [{ type: "text", text: result }] };
     },
   );

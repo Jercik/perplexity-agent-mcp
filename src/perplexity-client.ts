@@ -4,6 +4,7 @@ import type { ChatOptions } from "./schemas.js";
 export async function performChatCompletion(
   messages: { role: string; content: string }[],
   options: ChatOptions,
+  signal: AbortSignal,
 ): Promise<string> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
@@ -27,6 +28,7 @@ export async function performChatCompletion(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(body),
+      signal,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
