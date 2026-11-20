@@ -64,7 +64,7 @@ describe("cli entry point", () => {
 
     await expect(importCli()).rejects.toBeInstanceOf(ExitError);
     expect(errorSpy).toHaveBeenCalledWith(
-      "Error: Unknown option '--verison'\nUsage: perplexity-agent-mcp [--version]",
+      "Error: Unknown option '--verison'\nUsage: perplexity-agent-mcp [-v | --version]",
     );
     expect(exitSpy).toHaveBeenCalledWith(2);
   });

@@ -8,17 +8,19 @@ import { runServer } from "./server.js";
  * Main entry point for the Perplexity MCP Server
  */
 
-function isVersionRequested(): boolean {
+function parseCommandLine(): { version: boolean } {
   try {
     const { values } = parseArgs({ options: { version: { type: "boolean", short: "v" } } });
-    return values.version === true;
+    return { version: values.version === true };
   } catch (error) {
-    console.error(`Error: ${(error as Error).message}\nUsage: perplexity-agent-mcp [--version]`);
+    console.error(
+      `Error: ${(error as Error).message}\nUsage: perplexity-agent-mcp [-v | --version]`,
+    );
     return process.exit(2);
   }
 }
 
-if (isVersionRequested()) {
+if (parseCommandLine().version) {
   console.log(packageJson.version);
   process.exit(0);
 }
