@@ -36,8 +36,6 @@ const AUTHORITATIVE_SOURCES = `
 - [Exploring JS book](https://exploringjs.com/js/book/index.html)
 - [Deep JavaScript book](https://exploringjs.com/deep-js/toc.html)
 - [Node.js Shell Scripting](https://exploringjs.com/nodejs-shell-scripting/toc.html)
-
-- Default to using modern ESM and TypeScript for examples when relevant.
 `.trim();
 
 interface Tool {
@@ -112,7 +110,6 @@ Research complex questions, compare approaches, and provide actionable recommend
 - Best practices and trade-off analysis
 
 # Instructions
-- Start with a brief analysis plan (3-5 conceptual steps) to structure your research
 - Search multiple sources to compare different approaches
 - Analyze real-world usage patterns in popular repositories
 - Weigh trade-offs based on the user's specific constraints
