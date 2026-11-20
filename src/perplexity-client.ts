@@ -1,15 +1,6 @@
 import { formatPerplexityResponse } from "./format-perplexity-response.js";
 import type { ChatOptions } from "./schemas.js";
 
-/**
- * Performs a chat completion by sending a request to the Perplexity API.
- * Filters out <think> blocks from reasoning models before returning content.
- *
- * @param {Array<{ role: string; content: string }>} messages - An array of message objects.
- * @param {ChatOptions} options - Options for the chat completion.
- * @returns {Promise<string>} The chat completion result content.
- * @throws Will throw an error if the API request fails.
- */
 export async function performChatCompletion(
   messages: { role: string; content: string }[],
   options: ChatOptions,
