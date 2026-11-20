@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createAskPerplexity } from "./ask-perplexity.ts";
 import { createServer } from "./server.ts";
 
 const client = new Client({ name: "test-client", version: "1.0.0" });
@@ -32,7 +33,7 @@ describe("createServer", () => {
       });
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createServer("test-api-key").connect(serverTransport);
+    await createServer(createAskPerplexity("test-api-key")).connect(serverTransport);
     await client.connect(clientTransport);
 
     const cancellation = new AbortController();

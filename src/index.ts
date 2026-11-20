@@ -2,6 +2,7 @@
 
 import { parseArgs } from "node:util";
 import packageJson from "../package.json" with { type: "json" };
+import { createAskPerplexity } from "./ask-perplexity.js";
 import { runServer } from "./server.js";
 
 /**
@@ -38,7 +39,7 @@ const apiKey = readApiKey();
 
 async function main(): Promise<void> {
   try {
-    await runServer(apiKey);
+    await runServer(createAskPerplexity(apiKey));
   } catch (error) {
     console.error("Fatal error running server:", error);
     process.exit(1);

@@ -1,13 +1,13 @@
 import { z } from "zod";
-import { askPerplexity } from "../ask-perplexity.js";
 import { LOOKUP_SYSTEM_PROMPT } from "../prompts.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { AskPerplexity } from "../ask-perplexity.js";
 
 /**
  * Registers the lookup tool with the MCP server.
  * Fetches precise, source-backed facts from official sources.
  */
-export function registerLookupTool(server: McpServer, apiKey: string) {
+export function registerLookupTool(server: McpServer, askPerplexity: AskPerplexity) {
   server.registerTool(
     "lookup",
     {
@@ -24,7 +24,6 @@ One question per call—split combined requests into separate queries.
     },
     async ({ query }, { signal }) => {
       const result = await askPerplexity(query, {
-        apiKey,
         model: "sonar-pro",
         system: LOOKUP_SYSTEM_PROMPT,
         searchContextSize: "medium",

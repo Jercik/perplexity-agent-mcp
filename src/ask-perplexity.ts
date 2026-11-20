@@ -1,16 +1,22 @@
 import { formatPerplexityResponse } from "./format-perplexity-response.js";
 
 interface AskOptions {
-  apiKey: string;
   model: string;
   system: string;
   searchContextSize: "low" | "medium" | "high";
   signal: AbortSignal;
 }
 
-export async function askPerplexity(
+export type AskPerplexity = (question: string, options: AskOptions) => Promise<string>;
+
+export function createAskPerplexity(apiKey: string): AskPerplexity {
+  return async (question, options) => askPerplexity(apiKey, question, options);
+}
+
+async function askPerplexity(
+  apiKey: string,
   question: string,
-  { apiKey, model, system, searchContextSize, signal }: AskOptions,
+  { model, system, searchContextSize, signal }: AskOptions,
 ): Promise<string> {
   const url = new URL("https://api.perplexity.ai/chat/completions");
   const body = {
