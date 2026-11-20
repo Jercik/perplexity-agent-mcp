@@ -1,6 +1,6 @@
 import { formatPerplexityResponse } from "./format-perplexity-response.js";
 
-interface AskOptions {
+export interface AskOptions {
   model: string;
   system: string;
   searchContextSize: "low" | "medium" | "high";

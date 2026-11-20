@@ -1,8 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import packageJson from "../package.json" with { type: "json" };
-import { registerLookupTool } from "./tools/lookup.js";
-import { registerAnswerTool } from "./tools/answer.js";
+import { registerTools } from "./register-tools.js";
 import type { AskPerplexity } from "./ask-perplexity.js";
 
 /**
@@ -15,9 +14,7 @@ export function createServer(askPerplexity: AskPerplexity): McpServer {
     version: packageJson.version,
   });
 
-  // Register all tools
-  registerLookupTool(server, askPerplexity);
-  registerAnswerTool(server, askPerplexity);
+  registerTools(server, askPerplexity);
 
   return server;
 }
