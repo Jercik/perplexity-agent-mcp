@@ -1,5 +1,5 @@
-import { type ChatOptions, PerplexityResponse } from "./schemas.js";
-import { stripThinkContent } from "./strip-think-content.js";
+import { formatPerplexityResponse } from "./format-perplexity-response.js";
+import type { ChatOptions } from "./schemas.js";
 
 /**
  * Performs a chat completion by sending a request to the Perplexity API.
@@ -66,36 +66,5 @@ export async function performChatCompletion(
     });
   }
 
-  const parsedResponse = PerplexityResponse.safeParse(json);
-
-  let messageContent: string = parsedResponse.success
-    ? (parsedResponse.data.choices?.[0]?.message?.content ?? "")
-    : "";
-
-  // Filter out <think> blocks from reasoning models (e.g., sonar-reasoning-pro)
-  // These blocks contain internal reasoning tokens that should not be exposed to MCP clients
-  messageContent = stripThinkContent(messageContent);
-
-  // Build final content and normalize whitespace consistently
-
-  // Append Sources section by rendering all search_results in order.
-  if (parsedResponse.success && parsedResponse.data.search_results) {
-    const results = parsedResponse.data.search_results;
-    if (results.length > 0) {
-      const lines = results.map((sr, index) => {
-        const index_ = index + 1;
-        const dateSuffix = sr.date ? ` (${sr.date})` : "";
-        return `[${index_}] ${sr.title} — ${sr.url}${dateSuffix}`;
-      });
-      messageContent = `${messageContent}\n\nSources:\n${lines.join("\n")}`;
-    }
-  }
-
-  // Trim leading and trailing whitespace, then ensure one trailing newline
-  messageContent = messageContent.trim();
-
-  // Ensure trailing newline in final response
-  messageContent += "\n";
-
-  return messageContent;
+  return formatPerplexityResponse(json);
 }

@@ -6,31 +6,21 @@ import { z } from "zod";
 const SearchResult = z.object({
   title: z.string(),
   url: z.string(),
-  date: z.string().optional(),
-  last_updated: z.string().optional(),
+  date: z.string().nullish(),
 });
 
-/**
- * Schema for parsing an array of Perplexity search results
- */
-const SearchResults = z.array(SearchResult);
+const Choice = z.object({
+  message: z.object({
+    content: z.string(),
+  }),
+});
 
 /**
  * Minimal Perplexity response shape we rely on
  */
 export const PerplexityResponse = z.object({
-  choices: z
-    .array(
-      z.object({
-        message: z
-          .object({
-            content: z.string().optional(),
-          })
-          .optional(),
-      }),
-    )
-    .optional(),
-  search_results: SearchResults.optional(),
+  choices: z.tuple([Choice], Choice),
+  search_results: z.array(SearchResult).nullish(),
 });
 
 /**
