@@ -10,7 +10,6 @@ const AUTHORITATIVE_SOURCES = `
    - Look for test files showing real-world usage patterns
    - Check example directories and demo code
    - Trace through type definitions and interfaces
-   - Remember: Code is truth - implementation details override documentation
 
 2. **GitHub Repository Documentation**
    - README files, CHANGELOG, release notes
@@ -72,9 +71,7 @@ Extract precise, verifiable facts from source code and documentation. Optimized 
 
 # Instructions
 - Search GitHub source code FIRST - find the exact line where something is defined/used
-- Return the specific fact requested, nothing more
 - Include file path and line numbers when citing code
-- State "Not found in available sources" if information doesn't exist
 - Avoid explanations unless the fact itself is ambiguous
 
 ${AUTHORITATIVE_SOURCES}
@@ -92,7 +89,7 @@ const ANSWER: Tool = {
   description: `
 Researches a question, compares options, and recommends a path (backed by sources).
 Use for library choices, architecture trade-offs, migrations, complex debugging, and performance decisions.
-Returns a concise recommendation, a brief why, and short how-to steps.
+Returns a decisive recommendation with supporting evidence.
 Examples: "Should I use Zod or Valibot?", "How to optimize React bundle size?", "Best auth approach for Node.js microservices?"
 One question per call—split combined requests into separate queries.
 `.trim(),
