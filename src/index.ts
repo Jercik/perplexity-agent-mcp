@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { parseArgs } from "node:util";
 import packageJson from "../package.json" with { type: "json" };
 import { runServer } from "./server.js";
 
@@ -7,9 +8,17 @@ import { runServer } from "./server.js";
  * Main entry point for the Perplexity MCP Server
  */
 
-const arguments_ = new Set(process.argv.slice(2));
+function isVersionRequested(): boolean {
+  try {
+    const { values } = parseArgs({ options: { version: { type: "boolean", short: "v" } } });
+    return values.version === true;
+  } catch (error) {
+    console.error(`Error: ${(error as Error).message}\nUsage: perplexity-agent-mcp [--version]`);
+    return process.exit(2);
+  }
+}
 
-if (arguments_.has("--version") || arguments_.has("-v")) {
+if (isVersionRequested()) {
   console.log(packageJson.version);
   process.exit(0);
 }

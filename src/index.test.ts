@@ -53,6 +53,22 @@ describe("cli entry point", () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it("rejects an unknown option with a usage error before starting the server", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new ExitError(code);
+    }) as never);
+
+    process.argv = ["node", "index.ts", "--verison"];
+    process.env.PERPLEXITY_API_KEY = "dummy-api-key";
+
+    await expect(importCli()).rejects.toBeInstanceOf(ExitError);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error: Unknown option '--verison'\nUsage: perplexity-agent-mcp [--version]",
+    );
+    expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
   it("requires PERPLEXITY_API_KEY when no version flag is provided", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
